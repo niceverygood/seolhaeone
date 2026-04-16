@@ -280,49 +280,154 @@ def ai_suggestions(db: Session = Depends(get_db)):
 @router.get("/revenue-optimization")
 def revenue_optimization(db: Session = Depends(get_db)):
     """AI 매출 극대화 분석 보고서"""
+    from app.services.ai_engine import forecast_demand, calculate_overbooking
+
     today = date.today()
     month_start = today.replace(day=1)
+    tomorrow = today + timedelta(days=1)
 
-    # Current month stats
     stats = db.query(DailyStat).filter(
         DailyStat.stat_date >= month_start, DailyStat.stat_date <= today
     ).all()
     total_revenue = sum(int(s.total_revenue or 0) for s in stats)
 
-    # Weekday vs weekend comparison
     weekday_rev = sum(int(s.total_revenue or 0) for s in stats if s.stat_date.weekday() < 5)
     weekend_rev = sum(int(s.total_revenue or 0) for s in stats if s.stat_date.weekday() >= 5)
     weekday_count = sum(1 for s in stats if s.stat_date.weekday() < 5) or 1
     weekend_count = sum(1 for s in stats if s.stat_date.weekday() >= 5) or 1
 
-    # Low occupancy slots
-    tomorrow = today + timedelta(days=1)
     empty_slots = db.query(GolfTeetime).filter(
-        GolfTeetime.tee_date == tomorrow,
-        GolfTeetime.status == "available",
+        GolfTeetime.tee_date == tomorrow, GolfTeetime.status == "available",
     ).count()
 
-    # High CLV customers not visiting recently
     dormant_vips = db.query(Customer).filter(
         Customer.grade.in_(["diamond", "gold"]),
         Customer.last_visit_at < today - timedelta(days=30),
     ).count()
 
+    forecast = forecast_demand(db, tomorrow)
+    overbook = calculate_overbooking(db, tomorrow)
+
     return {
         "summary": f"이번 달 매출: ₩{total_revenue:,}",
+        "tomorrow_forecast": forecast,
+        "overbooking": overbook,
         "insights": [
             {
                 "title": "평일 매출 강화 필요",
                 "detail": f"평일 일평균 ₩{weekday_rev // weekday_count:,} vs 주말 일평균 ₩{weekend_rev // weekend_count:,}. "
                           "평일 프로모션으로 격차를 줄이세요.",
+                "impact": f"₩{(weekend_rev // weekend_count - weekday_rev // weekday_count):,} 갭",
             },
             {
                 "title": f"내일 빈 슬롯 {empty_slots}개 활용",
                 "detail": "대기 고객 자동 배정 또는 당일 할인 프로모션으로 빈 슬롯을 채우세요.",
+                "impact": f"₩{empty_slots * 380000:,} 잠재 매출",
             },
             {
                 "title": f"미방문 VIP {dormant_vips}명 리콜",
                 "detail": "30일 이상 미방문 Diamond/Gold 고객에게 맞춤 초대를 발송하세요.",
+                "impact": "VIP CLV 보호",
+            },
+            {
+                "title": f"오버부킹 {overbook['recommended_overbook']}건 추천",
+                "detail": f"내일 예상 노쇼 {overbook['expected_noshows']:.0f}건 기반. "
+                          f"안전 마진 적용하여 {overbook['recommended_overbook']}건 추가 예약 가능.",
+                "impact": f"₩{overbook['potential_recovery']:,} 회수",
             },
         ],
     }
+
+
+@router.get("/dynamic-pricing/{room_id}")
+def get_dynamic_price(
+    room_id: str,
+    target_date: date = Query(..., alias="date"),
+    customer_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """객실 동적 가격 조회"""
+    from uuid import UUID as UUIDType
+    from app.services.ai_engine import calculate_dynamic_price
+
+    room = db.query(Room).filter(Room.id == UUIDType(room_id)).first()
+    if not room:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Room not found")
+
+    stat = db.query(DailyStat).filter(DailyStat.stat_date == target_date).first()
+    occupancy = float(stat.room_occupancy_rate or 0) if stat else 0.5
+
+    customer_grade = None
+    if customer_id:
+        cust = db.query(Customer).filter(Customer.id == UUIDType(customer_id)).first()
+        if cust:
+            customer_grade = cust.grade
+
+    return calculate_dynamic_price(
+        int(room.base_price), target_date, room.room_type, occupancy, customer_grade
+    )
+
+
+@router.get("/package-recommend/{customer_id}")
+def get_package_recommendation(customer_id: str, db: Session = Depends(get_db)):
+    """고객 맞춤 패키지 추천"""
+    from uuid import UUID as UUIDType
+    from app.services.ai_engine import recommend_packages
+
+    cust = db.query(Customer).filter(Customer.id == UUIDType(customer_id)).first()
+    if not cust:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Customer not found")
+
+    return recommend_packages(cust, db)
+
+
+@router.get("/crosssell/{customer_id}")
+def get_crosssell(
+    customer_id: str,
+    booking_type: str = Query(...),
+    booking_date: date = Query(..., alias="date"),
+    db: Session = Depends(get_db),
+):
+    """크로스셀 추천"""
+    from uuid import UUID as UUIDType
+    from app.services.ai_engine import get_crosssell_recommendations
+
+    cust = db.query(Customer).filter(Customer.id == UUIDType(customer_id)).first()
+    if not cust:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Customer not found")
+
+    return get_crosssell_recommendations(cust, booking_type, booking_date, db)
+
+
+@router.get("/caddy-recommend/{customer_id}")
+def get_caddy_recommendation(customer_id: str, db: Session = Depends(get_db)):
+    """캐디 매칭 추천"""
+    from uuid import UUID as UUIDType
+    from app.services.ai_engine import recommend_caddy
+
+    cust = db.query(Customer).filter(Customer.id == UUIDType(customer_id)).first()
+    if not cust:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Customer not found")
+
+    return recommend_caddy(cust, db)
+
+
+@router.get("/briefing")
+def get_daily_briefing(db: Session = Depends(get_db)):
+    """일일 AI 브리핑"""
+    from app.services.ai_engine import generate_daily_briefing
+    return generate_daily_briefing(db)
+
+
+@router.get("/demand-forecast")
+def get_demand_forecast(
+    target_date: date = Query(..., alias="date"),
+    db: Session = Depends(get_db),
+):
+    """수요 예측"""
+    from app.services.ai_engine import forecast_demand
+    return forecast_demand(db, target_date)

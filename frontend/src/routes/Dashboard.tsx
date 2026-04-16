@@ -5,6 +5,7 @@ import { DonutCard } from "@/components/dashboard/DonutCard";
 import { AiInsightsPanel } from "@/components/dashboard/AiInsightsPanel";
 import { AiQueryBar } from "@/components/dashboard/AiQueryBar";
 import { AiActionsLog } from "@/components/dashboard/AiActionsLog";
+import { AiBriefingPanel } from "@/components/dashboard/AiBriefingPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import {
@@ -140,18 +141,27 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Bottom row: distributions + action log */}
+      {/* Middle row: distributions + AI briefing */}
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <DonutCard
-          title="코스별 매출"
-          unit="이번 달 · 단위: 백만 원"
-          data={courseRevenue}
-        />
-        <DonutCard
-          title="고객 등급 분포"
-          unit="활성 회원 기준"
-          data={gradeDistribution}
-        />
+        <div className="space-y-6">
+          <DonutCard
+            title="코스별 매출"
+            unit="이번 달 · 단위: 백만 원"
+            data={courseRevenue}
+          />
+          <DonutCard
+            title="고객 등급 분포"
+            unit="활성 회원 기준"
+            data={gradeDistribution}
+          />
+        </div>
+        <div className="xl:col-span-2">
+          <AiBriefingPanel />
+        </div>
+      </section>
+
+      {/* Bottom: action log */}
+      <section>
         <AiActionsLog data={aiActions ?? []} loading={actionsLoading} onRefresh={refetchActions} />
       </section>
     </div>
