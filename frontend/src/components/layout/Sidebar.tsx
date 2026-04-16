@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Flag,
@@ -6,8 +6,10 @@ import {
   Users,
   Bot,
   Settings,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/contexts/AuthContext";
 
 const nav = [
   { to: "/dashboard", label: "대시보드", icon: LayoutDashboard },
@@ -19,6 +21,14 @@ const nav = [
 ];
 
 export function Sidebar() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <aside className="flex h-screen w-[260px] shrink-0 flex-col bg-bg-primary text-text-primary">
       {/* Logo */}
@@ -66,14 +76,21 @@ export function Sidebar() {
       <div className="mx-3 mb-4 rounded-lg border border-border-subtle bg-bg-secondary px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gold text-sm font-semibold text-text-on-gold">
-            한
+            {user?.name?.charAt(0) ?? "?"}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-text-primary">
-              한승수
+              {user?.name ?? "사용자"}
             </div>
-            <div className="text-xs text-text-muted">관리자</div>
+            <div className="text-xs text-text-muted">{user?.role ?? ""}</div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary"
+            title="로그아웃"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>

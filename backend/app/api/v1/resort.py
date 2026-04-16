@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.customer import Customer
 from app.models.resort import Room, RoomReservation
 
 router = APIRouter(prefix="/resort", tags=["resort"])
@@ -47,23 +48,34 @@ def list_rooms(
 @router.get("/reservations")
 def list_reservations(
     check_in: date | None = Query(None),
+    status: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(RoomReservation)
+    q = (
+        db.query(RoomReservation, Customer, Room)
+        .outerjoin(Customer, RoomReservation.customer_id == Customer.id)
+        .outerjoin(Room, RoomReservation.room_id == Room.id)
+    )
     if check_in:
         q = q.filter(RoomReservation.check_in == check_in)
-    items = q.order_by(RoomReservation.check_in).limit(100).all()
+    if status:
+        q = q.filter(RoomReservation.status == status)
+    items = q.order_by(RoomReservation.check_in.desc()).limit(100).all()
     return [
         {
             "id": str(r.id),
             "room_id": str(r.room_id),
             "customer_id": str(r.customer_id),
+            "customer_name": cust.name if cust else None,
+            "room_number": room.room_number if room else None,
+            "room_type": room.room_type if room else None,
+            "building": room.building if room else None,
             "check_in": str(r.check_in),
             "check_out": str(r.check_out),
             "status": r.status,
             "total_price": int(r.total_price or 0),
         }
-        for r in items
+        for r, cust, room in items
     ]
 
 

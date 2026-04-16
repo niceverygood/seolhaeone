@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import type { CustomerGrade } from "@/lib/mockCustomers";
+import type { CustomerGrade } from "@/lib/types";
 
 const styles: Record<CustomerGrade, string> = {
   diamond: "bg-gold text-text-on-gold",

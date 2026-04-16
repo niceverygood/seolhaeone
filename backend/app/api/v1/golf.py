@@ -6,7 +6,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.customer import Customer
 from app.models.golf import GolfCourse, GolfTeetime
+from app.models.package import Package
+from app.models.staff import Staff
 
 router = APIRouter(prefix="/golf", tags=["golf"])
 
@@ -44,10 +47,16 @@ def list_teetimes(
     course_id: UUID | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(GolfTeetime).filter(GolfTeetime.tee_date == tee_date)
+    q = (
+        db.query(GolfTeetime, Customer, Staff, Package)
+        .outerjoin(Customer, GolfTeetime.customer_id == Customer.id)
+        .outerjoin(Staff, GolfTeetime.caddy_id == Staff.id)
+        .outerjoin(Package, GolfTeetime.package_id == Package.id)
+        .filter(GolfTeetime.tee_date == tee_date)
+    )
     if course_id:
         q = q.filter(GolfTeetime.course_id == course_id)
-    teetimes = q.order_by(GolfTeetime.tee_time).all()
+    rows = q.order_by(GolfTeetime.tee_time).all()
     return [
         {
             "id": str(t.id),
@@ -56,12 +65,16 @@ def list_teetimes(
             "tee_time": t.tee_time.strftime("%H:%M"),
             "status": t.status,
             "customer_id": str(t.customer_id) if t.customer_id else None,
+            "customer_name": cust.name if cust else None,
+            "customer_grade": cust.grade if cust else None,
             "party_size": t.party_size,
             "caddy_id": str(t.caddy_id) if t.caddy_id else None,
+            "caddy_name": caddy.name if caddy else None,
             "noshow_score": float(t.noshow_score) if t.noshow_score else 0,
+            "package_name": pkg.name if pkg else None,
             "notes": t.notes,
         }
-        for t in teetimes
+        for t, cust, caddy, pkg in rows
     ]
 
 

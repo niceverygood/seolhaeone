@@ -1,8 +1,8 @@
 import { AlertTriangle, Diamond, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { TeetimeSlot } from "@/lib/mockGolf";
+import type { TeetimeResponse } from "@/lib/types";
 
-type Props = { slot: TeetimeSlot };
+type Props = { slot: TeetimeResponse };
 
 const gradeBadge: Record<string, string> = {
   diamond: "bg-gold text-text-on-gold",
@@ -13,8 +13,8 @@ const gradeBadge: Record<string, string> = {
 
 export function TeetimeSlotCard({ slot }: Props) {
   const isBooked = slot.status === "reserved" || slot.status === "completed";
-  const isHighRisk = (slot.noshowScore ?? 0) > 0.3;
-  const isVip = slot.customerGrade === "diamond" || slot.customerGrade === "gold";
+  const isHighRisk = slot.noshow_score > 0.3;
+  const isVip = slot.customer_grade === "diamond" || slot.customer_grade === "gold";
 
   if (!isBooked) {
     return (
@@ -36,43 +36,39 @@ export function TeetimeSlotCard({ slot }: Props) {
         isHighRisk && "ring-1 ring-danger/30",
       )}
     >
-      {/* Top: name + grade */}
       <div className="flex items-center gap-1.5">
         {isVip && <Diamond className="h-3 w-3 text-gold" />}
         <span className={cn("text-sm font-medium", isVip ? "text-text-dark" : "text-text-primary")}>
-          {slot.customerName}
+          {slot.customer_name ?? "미지정"}
         </span>
-        {slot.customerGrade && (
+        {slot.customer_grade && (
           <span
             className={cn(
               "ml-auto rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
-              gradeBadge[slot.customerGrade],
+              gradeBadge[slot.customer_grade] ?? "",
             )}
           >
-            {slot.customerGrade}
+            {slot.customer_grade}
           </span>
         )}
       </div>
 
-      {/* Bottom: party + caddy + noshow */}
       <div className="mt-1.5 flex items-center gap-2 text-[11px] text-text-muted">
         <span className="flex items-center gap-0.5">
-          <Users className="h-3 w-3" /> {slot.partySize}
+          <Users className="h-3 w-3" /> {slot.party_size}
         </span>
-        {slot.caddyName && (
-          <span className="truncate">{slot.caddyName}</span>
-        )}
+        {slot.caddy_name && <span className="truncate">{slot.caddy_name}</span>}
         {isHighRisk && (
           <span className="ml-auto flex items-center gap-0.5 font-semibold text-[color:var(--color-danger)]">
             <AlertTriangle className="h-3 w-3" />
-            {Math.round((slot.noshowScore ?? 0) * 100)}%
+            {Math.round(slot.noshow_score * 100)}%
           </span>
         )}
       </div>
 
-      {slot.packageName && (
+      {slot.package_name && (
         <div className="mt-1 truncate rounded bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-dark">
-          {slot.packageName}
+          {slot.package_name}
         </div>
       )}
     </div>

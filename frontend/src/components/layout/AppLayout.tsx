@@ -1,6 +1,8 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { Spinner } from "@/components/ui/Spinner";
 
 const titleMap: Record<string, { title: string; subtitle?: string }> = {
   "/dashboard": {
@@ -16,6 +18,11 @@ const titleMap: Record<string, { title: string; subtitle?: string }> = {
 
 export function AppLayout() {
   const { pathname } = useLocation();
+  const { user, loading } = useAuth();
+
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+
   const meta = titleMap[pathname]
     ?? (pathname.startsWith("/customers/") ? { title: "고객 프로필", subtitle: "360° 뷰" } : { title: "설해원" });
 

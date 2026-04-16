@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { courses, todaySlots } from "@/lib/mockGolf";
+import { useCourses, useTeetimes } from "@/hooks/useGolf";
 import { TeetimeSlotCard } from "@/components/golf/TeetimeSlotCard";
 import { GolfAiPanel } from "@/components/golf/GolfAiPanel";
+import { Spinner } from "@/components/ui/Spinner";
+import { ErrorAlert } from "@/components/ui/ErrorAlert";
+import type { TeetimeResponse } from "@/lib/types";
 
 const timeSlots: string[] = [];
 for (let h = 6; h <= 17; h++) {
@@ -13,43 +16,71 @@ for (let h = 6; h <= 17; h++) {
   }
 }
 
+function formatDateKR(d: Date) {
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+}
+
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Golf() {
-  const [activeCourse, setActiveCourse] = useState(courses[0].id);
-  const [dateLabel] = useState("2026년 4월 16일 (수)");
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const { data: courses, loading: coursesLoading, error: coursesError, refetch } = useCourses();
+  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
 
-  const filtered = todaySlots.filter((s) => s.courseId === activeCourse);
-  const slotMap = new Map(filtered.map((s) => [s.time, s]));
+  const courseId = activeCourseId ?? courses?.[0]?.id ?? "";
+  const dateStr = toDateStr(selectedDate);
+  const { data: teetimes, loading: ttLoading } = useTeetimes(dateStr, courseId || undefined);
 
-  const bookedCount = filtered.filter((s) => s.status === "reserved").length;
-  const totalCount = filtered.length;
-  const highRiskCount = filtered.filter((s) => (s.noshowScore ?? 0) > 0.3).length;
+  const slotMap = useMemo(() => {
+    const map = new Map<string, TeetimeResponse>();
+    if (teetimes) {
+      for (const t of teetimes) {
+        map.set(t.tee_time, t);
+      }
+    }
+    return map;
+  }, [teetimes]);
+
+  const filtered = teetimes ?? [];
+  const bookedCount = filtered.filter((s) => s.status === "reserved" || s.status === "completed").length;
+  const totalCount = timeSlots.length;
+  const highRiskCount = filtered.filter((s) => s.noshow_score > 0.3).length;
+
+  const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; });
+  const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; });
+
+  if (coursesLoading) return <Spinner />;
+  if (coursesError) return <ErrorAlert message={coursesError} onRetry={refetch} />;
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-6">
-      {/* Top bar: date + course tabs + stats */}
+      {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-light bg-surface-white hover:bg-surface-light">
+          <button onClick={prevDay} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-light bg-surface-white hover:bg-surface-light">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-2">
             <CalIcon className="h-4 w-4 text-gold" />
-            <span className="font-display text-lg text-text-dark">{dateLabel}</span>
+            <span className="font-display text-lg text-text-dark">{formatDateKR(selectedDate)}</span>
           </div>
-          <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-light bg-surface-white hover:bg-surface-light">
+          <button onClick={nextDay} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-light bg-surface-white hover:bg-surface-light">
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
 
         {/* Course tabs */}
         <div className="flex rounded-lg border border-border-light bg-surface-white p-1">
-          {courses.map((c) => (
+          {(courses ?? []).map((c) => (
             <button
               key={c.id}
-              onClick={() => setActiveCourse(c.id)}
+              onClick={() => setActiveCourseId(c.id)}
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                activeCourse === c.id
+                courseId === c.id
                   ? "bg-gold text-text-on-gold"
                   : "text-text-muted hover:text-text-dark",
               )}
@@ -70,7 +101,7 @@ export default function Golf() {
           <div>
             <span className="text-text-muted">점유율 </span>
             <span className="font-semibold text-gold-dark">
-              {Math.round((bookedCount / totalCount) * 100)}%
+              {totalCount > 0 ? Math.round((bookedCount / totalCount) * 100) : 0}%
             </span>
           </div>
           {highRiskCount > 0 && (
@@ -87,51 +118,48 @@ export default function Golf() {
 
       {/* Main: teesheet + AI panel */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
-        {/* Teesheet grid */}
         <div className="rounded-xl border border-border-light bg-surface-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <div className="grid grid-cols-[72px_1fr] divide-x divide-border-light">
-            {/* Time column header */}
             <div className="border-b border-border-light bg-surface-light px-3 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                시간
-              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">시간</span>
             </div>
-            {/* Course header */}
             <div className="border-b border-border-light bg-surface-light px-4 py-3">
               <span className="text-sm font-semibold text-text-dark">
-                {courses.find((c) => c.id === activeCourse)?.name}코스
+                {courses?.find((c) => c.id === courseId)?.name ?? ""}코스
               </span>
             </div>
           </div>
 
-          {/* Time rows */}
           <div className="max-h-[calc(100vh-340px)] overflow-y-auto">
-            {timeSlots.map((t) => {
-              const slot = slotMap.get(t);
-              return (
-                <div
-                  key={t}
-                  className="grid grid-cols-[72px_1fr] divide-x divide-border-light/60 border-b border-border-light/60 last:border-0"
-                >
-                  <div className="flex items-center justify-center py-2">
-                    <span className="font-mono text-xs text-text-muted">{t}</span>
+            {ttLoading ? (
+              <Spinner />
+            ) : (
+              timeSlots.map((t) => {
+                const slot = slotMap.get(t);
+                return (
+                  <div
+                    key={t}
+                    className="grid grid-cols-[72px_1fr] divide-x divide-border-light/60 border-b border-border-light/60 last:border-0"
+                  >
+                    <div className="flex items-center justify-center py-2">
+                      <span className="font-mono text-xs text-text-muted">{t}</span>
+                    </div>
+                    <div className="p-1.5">
+                      {slot ? (
+                        <TeetimeSlotCard slot={slot} />
+                      ) : (
+                        <div className="flex h-full min-h-[68px] items-center justify-center rounded-lg border border-dashed border-border-light bg-surface-white text-xs text-text-muted">
+                          -
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-1.5">
-                    {slot ? (
-                      <TeetimeSlotCard slot={slot} />
-                    ) : (
-                      <div className="flex h-full min-h-[68px] items-center justify-center rounded-lg border border-dashed border-border-light bg-surface-white text-xs text-text-muted">
-                        -
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Right: AI panel */}
         <div className="space-y-4">
           <GolfAiPanel />
         </div>

@@ -1,13 +1,22 @@
 import { Bot, Check, CloudRain, Clock, AlertTriangle, X, Pencil } from "lucide-react";
-import { aiGolfSuggestions, type AiGolfSuggestion } from "@/lib/mockGolf";
+import { useAiSuggestions } from "@/hooks/useAi";
+import type { AiSuggestion } from "@/lib/types";
 
-const icons: Record<AiGolfSuggestion["type"], typeof Bot> = {
+const icons: Record<string, typeof Bot> = {
   slot: Clock,
   weather: CloudRain,
   noshow: AlertTriangle,
+  operation: AlertTriangle,
+  customer: Bot,
+  revenue: Clock,
+  marketing: Bot,
 };
 
 export function GolfAiPanel() {
+  const { data: suggestions } = useAiSuggestions();
+
+  const items: AiSuggestion[] = suggestions ?? [];
+
   return (
     <section className="rounded-xl border-l-[3px] border-l-gold bg-gold-bg/70 p-5">
       <div className="mb-4 flex items-center gap-2">
@@ -16,8 +25,8 @@ export function GolfAiPanel() {
       </div>
 
       <ul className="space-y-3">
-        {aiGolfSuggestions.map((s) => {
-          const Icon = icons[s.type];
+        {items.map((s) => {
+          const Icon = icons[s.type] ?? Bot;
           return (
             <li key={s.id} className="rounded-lg border border-gold/30 bg-surface-white p-3">
               <div className="mb-1.5 flex items-center gap-2">

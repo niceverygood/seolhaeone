@@ -8,9 +8,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { revenueTrend } from "@/lib/mockData";
 
-export function RevenueChart() {
+type Datum = {
+  month: string;
+  actual: number | null;
+  forecast: number | null;
+};
+
+type Props = {
+  data: Datum[];
+};
+
+export function RevenueChart({ data }: Props) {
   return (
     <div className="rounded-xl border border-border-light bg-surface-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="mb-1 flex items-baseline justify-between">
@@ -29,7 +38,7 @@ export function RevenueChart() {
 
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={revenueTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="goldFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#C5A55A" stopOpacity={0.32} />
