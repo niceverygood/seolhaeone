@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&display=swap");
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+@import "tailwindcss";
+
+@theme {
+  /* Brand — Gold */
+  --color-gold: #c5a55a;
+  --color-gold-light: #d4ba7a;
+  --color-gold-dark: #a68b3e;
+  --color-gold-bg: #f5edd6;
+
+  /* Neutral — Dark (sidebar) */
+  --color-bg-primary: #0f0f0f;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-card: #242424;
+  --color-bg-elevated: #2c2c2c;
+  --color-border-subtle: #333333;
+
+  /* Neutral — Light (content) */
+  --color-surface-light: #f8f6f0;
+  --color-surface-white: #ffffff;
+  --color-border-light: #e5e2da;
+
+  /* Text */
+  --color-text-primary: #f5f5f0;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #666666;
+  --color-text-on-gold: #1a1a1a;
+  --color-text-dark: #1f1f1f;
+
+  /* Semantic */
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+
+  /* Fonts */
+  --font-display: "Noto Serif KR", Georgia, serif;
+  --font-body: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-surface-light);
+  color: var(--color-text-dark);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
