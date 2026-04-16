@@ -16,7 +16,8 @@ const titleMap: Record<string, { title: string; subtitle?: string }> = {
 
 export function AppLayout() {
   const { pathname } = useLocation();
-  const meta = titleMap[pathname] ?? { title: "설해원" };
+  const meta = titleMap[pathname]
+    ?? (pathname.startsWith("/customers/") ? { title: "고객 프로필", subtitle: "360° 뷰" } : { title: "설해원" });
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
