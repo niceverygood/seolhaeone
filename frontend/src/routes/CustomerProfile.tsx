@@ -218,21 +218,21 @@ export default function CustomerProfile() {
                 ) : (
                   (aiActions ?? []).map((a) => (
                     <div key={a.id} className="rounded-lg border-l-[3px] border-l-gold bg-gold-bg/40 p-4">
-                      <div className="mb-1 flex items-center gap-2">
-                        <Bot className="h-4 w-4 text-gold-dark" />
-                        <span className="text-sm font-semibold text-text-dark">{a.type}</span>
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <Bot className="h-4 w-4 shrink-0 text-gold-dark" />
+                        <span className="text-sm font-semibold leading-snug text-text-dark">{a.type}</span>
                       </div>
                       <p className="mb-3 text-sm text-text-muted">{a.detail}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs text-gold-dark">{a.impact && `▲ ${a.impact}`}</span>
-                        <div className="flex gap-1">
-                          <button className="flex h-7 items-center gap-1 rounded-md bg-gold px-2.5 text-xs font-medium text-text-on-gold hover:bg-gold-dark">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="whitespace-nowrap font-mono text-xs text-gold-dark">{a.impact && `▲ ${a.impact}`}</span>
+                        <div className="flex flex-wrap gap-1">
+                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-gold px-2.5 text-xs font-medium text-text-on-gold hover:bg-gold-dark">
                             <Check className="h-3 w-3" /> 승인
                           </button>
-                          <button className="flex h-7 items-center gap-1 rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-dark hover:bg-surface-light">
+                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-dark hover:bg-surface-light">
                             <Pencil className="h-3 w-3" /> 수정
                           </button>
-                          <button className="flex h-7 items-center gap-1 rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-muted hover:bg-surface-light">
+                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-muted hover:bg-surface-light">
                             <X className="h-3 w-3" /> 무시
                           </button>
                         </div>

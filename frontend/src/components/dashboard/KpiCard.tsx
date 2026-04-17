@@ -15,12 +15,12 @@ export function KpiCard({ label, value, delta, deltaType, spark }: Props) {
   const isUp = deltaType === "up";
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-border-light bg-surface-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
-      <div className="flex items-start justify-between">
+    <div className="group relative overflow-hidden rounded-xl border border-border-light bg-surface-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] sm:p-6">
+      <div className="flex items-start justify-between gap-2">
         <div className="text-sm font-medium text-text-muted">{label}</div>
         <div
           className={cn(
-            "flex items-center gap-1 text-xs font-semibold",
+            "flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-semibold",
             isUp ? "text-[color:var(--color-success)]" : "text-[color:var(--color-danger)]",
           )}
         >
@@ -33,7 +33,7 @@ export function KpiCard({ label, value, delta, deltaType, spark }: Props) {
         </div>
       </div>
 
-      <div className="mt-4 font-display text-[28px] leading-tight text-text-dark">
+      <div className="mt-4 truncate font-display text-[22px] leading-tight text-text-dark sm:text-[28px]">
         {value}
       </div>
 

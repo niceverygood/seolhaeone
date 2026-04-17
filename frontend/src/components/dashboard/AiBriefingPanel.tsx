@@ -17,11 +17,11 @@ export function AiBriefingPanel() {
     <div className="space-y-6">
       {/* Daily Briefing */}
       {briefing && (
-        <div className="rounded-xl border border-border-light bg-surface-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4 flex items-center gap-2">
-            <Sunrise className="h-5 w-5 text-gold" />
-            <h2 className="font-display text-lg text-text-dark">오늘의 AI 브리핑</h2>
-            <span className="ml-auto font-mono text-[11px] text-text-muted">{briefing.date}</span>
+        <div className="rounded-xl border border-border-light bg-surface-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Sunrise className="h-5 w-5 shrink-0 text-gold" />
+            <h2 className="font-display text-base text-text-dark sm:text-lg">오늘의 AI 브리핑</h2>
+            <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[11px] text-text-muted">{briefing.date}</span>
           </div>
 
           {/* Revenue summary */}
@@ -94,10 +94,10 @@ export function AiBriefingPanel() {
 
       {/* Revenue Optimization */}
       {revOpt && (
-        <div className="rounded-xl border border-border-light bg-surface-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-border-light bg-surface-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6">
           <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-gold" />
-            <h2 className="font-display text-lg text-text-dark">매출 최적화</h2>
+            <TrendingUp className="h-5 w-5 shrink-0 text-gold" />
+            <h2 className="font-display text-base text-text-dark sm:text-lg">매출 최적화</h2>
           </div>
 
           <p className="mb-4 text-sm font-medium text-gold-dark">{revOpt.summary}</p>
@@ -146,9 +146,9 @@ export function AiBriefingPanel() {
           <div className="space-y-2">
             {revOpt.insights.map((insight, i) => (
               <div key={i} className="rounded-lg border border-gold/20 bg-gold-bg/20 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-text-dark">{insight.title}</span>
-                  <span className="font-mono text-[10px] text-gold-dark">{insight.impact}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold leading-snug text-text-dark">{insight.title}</span>
+                  <span className="shrink-0 whitespace-nowrap font-mono text-[10px] text-gold-dark">{insight.impact}</span>
                 </div>
                 <p className="mt-1 text-xs text-text-muted">{insight.detail}</p>
               </div>
