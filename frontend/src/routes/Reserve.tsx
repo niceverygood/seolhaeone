@@ -1,11 +1,12 @@
 import { useState } from "react";
 import {
   Flag, BedDouble, Package as PackageIcon, Check, ChevronLeft,
-  Calendar, Users, User, Phone, Mail, MessageSquare, Sparkles,
+  Users, User, Phone, Mail, MessageSquare, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { LogoMark } from "@/components/brand/Logo";
 import { Spinner } from "@/components/ui/Spinner";
+import { InlineCalendar } from "@/components/calendar/InlineCalendar";
 import { api, ApiError } from "@/lib/api";
 import {
   usePublicCourses,
@@ -313,49 +314,38 @@ function Step2Date({
   checkOut: string;
   setCheckOut: (v: string) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-
   return (
-    <div className="space-y-6">
-      <h2 className="font-display text-xl text-text-dark">
-        {service === "golf" ? "라운딩 날짜 선택" : "숙박 기간 선택"}
-      </h2>
-
-      <div className="rounded-2xl border border-border-light bg-surface-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <label className="mb-2 flex items-center gap-2 text-sm font-medium text-text-dark">
-          <Calendar className="h-4 w-4 text-gold" />
-          {service === "golf" ? "예약 날짜" : "체크인"}
-        </label>
-        <input
-          type="date"
-          value={checkIn}
-          min={today}
-          onChange={(e) => setCheckIn(e.target.value)}
-          className="h-12 w-full rounded-lg border border-border-light bg-surface-light px-4 text-base text-text-dark focus:border-gold focus:bg-surface-white focus:outline-none"
-        />
-
-        {service !== "golf" && (
-          <>
-            <label className="mb-2 mt-4 flex items-center gap-2 text-sm font-medium text-text-dark">
-              <Calendar className="h-4 w-4 text-gold" />
-              체크아웃
-            </label>
-            <input
-              type="date"
-              value={checkOut}
-              min={checkIn || today}
-              onChange={(e) => setCheckOut(e.target.value)}
-              className="h-12 w-full rounded-lg border border-border-light bg-surface-light px-4 text-base text-text-dark focus:border-gold focus:bg-surface-white focus:outline-none"
-            />
-          </>
-        )}
-
-        {checkIn && checkOut && checkOut > checkIn && (
-          <p className="mt-4 rounded-lg bg-gold-bg/50 px-3 py-2 text-xs text-gold-dark">
-            {Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))}박 숙박
-          </p>
-        )}
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl text-text-dark">
+          {service === "golf" ? "라운딩 날짜 선택" : "숙박 기간 선택"}
+        </h2>
+        <p className="mt-1 text-sm text-text-muted">
+          {service === "golf"
+            ? "날짜별 가용 티타임 수를 확인하고 선택하세요"
+            : "체크인/체크아웃 날짜를 순서대로 선택하세요"}
+        </p>
       </div>
+
+      {service === "golf" ? (
+        <InlineCalendar
+          mode="single"
+          serviceType="golf"
+          selected={checkIn}
+          onSelect={setCheckIn}
+        />
+      ) : (
+        <InlineCalendar
+          mode="range"
+          serviceType="room"
+          rangeStart={checkIn}
+          rangeEnd={checkOut}
+          onRangeSelect={(start, end) => {
+            setCheckIn(start);
+            setCheckOut(end);
+          }}
+        />
+      )}
     </div>
   );
 }

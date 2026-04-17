@@ -1,11 +1,12 @@
 """
 공개 고객 예약 API — 로그인 없이 접근 가능한 고객용 예약 엔드포인트
 """
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -62,6 +63,65 @@ def available_slots(
         }
         for s in slots
     ]
+
+
+@router.get("/golf/availability")
+def golf_monthly_availability(
+    month: str = Query(..., description="YYYY-MM"),
+    course_id: UUID | None = None,
+    db: Session = Depends(get_db),
+):
+    """월별 날짜-코스별 가용 슬롯 수 집계"""
+    year, mon = int(month.split("-")[0]), int(month.split("-")[1])
+    start = date(year, mon, 1)
+    end = date(year + (1 if mon == 12 else 0), (mon % 12) + 1, 1)
+
+    q = db.query(
+        GolfTeetime.tee_date,
+        func.count(GolfTeetime.id).filter(GolfTeetime.status == "available").label("available"),
+        func.count(GolfTeetime.id).label("total"),
+    ).filter(GolfTeetime.tee_date >= start, GolfTeetime.tee_date < end)
+
+    if course_id:
+        q = q.filter(GolfTeetime.course_id == course_id)
+
+    rows = q.group_by(GolfTeetime.tee_date).all()
+
+    result: dict[str, dict[str, int]] = {}
+    for d, available, total in rows:
+        result[str(d)] = {"available": int(available or 0), "total": int(total or 0)}
+    return result
+
+
+@router.get("/rooms/availability")
+def room_monthly_availability(
+    month: str = Query(..., description="YYYY-MM"),
+    db: Session = Depends(get_db),
+):
+    """월별 날짜별 가용 객실 수 집계"""
+    year, mon = int(month.split("-")[0]), int(month.split("-")[1])
+    start = date(year, mon, 1)
+    end = date(year + (1 if mon == 12 else 0), (mon % 12) + 1, 1)
+
+    total_rooms = db.query(Room).filter(Room.status == "available").count()
+
+    # Fetch all reservations overlapping with the month
+    reservations = db.query(RoomReservation).filter(
+        RoomReservation.status.in_(["confirmed", "checked_in"]),
+        RoomReservation.check_in < end,
+        RoomReservation.check_out > start,
+    ).all()
+
+    result: dict[str, dict[str, int]] = {}
+    d = start
+    while d < end:
+        occupied = sum(1 for r in reservations if r.check_in <= d < r.check_out)
+        result[str(d)] = {
+            "available": max(0, total_rooms - occupied),
+            "total": total_rooms,
+        }
+        d += timedelta(days=1)
+    return result
 
 
 @router.get("/rooms")
