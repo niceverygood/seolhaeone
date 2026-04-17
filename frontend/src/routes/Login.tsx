@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { LogoMark } from "@/components/brand/Logo";
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -35,8 +36,9 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-bg-primary">
       <div className="w-full max-w-sm space-y-8 p-8">
         {/* Logo */}
-        <div className="text-center">
-          <h1 className="font-display text-3xl text-white">Seolhaewon</h1>
+        <div className="flex flex-col items-center">
+          <LogoMark size={64} color="#c5a55a" />
+          <h1 className="mt-5 font-display text-3xl text-white">Seolhaewon</h1>
           <p className="mt-1 font-display text-sm tracking-[0.3em] text-gold">
             雪 海 園
           </p>
@@ -87,9 +89,17 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-[11px] text-text-muted">
-          기본 계정: admin@seolhaeone.kr / seolhae1234
-        </p>
+        <div className="space-y-3 text-center">
+          <p className="text-[11px] text-text-muted">
+            기본 계정: admin@seolhaeone.kr / seolhae1234
+          </p>
+          <a
+            href="/seolhaeone/reserve"
+            className="inline-block text-sm font-medium text-gold hover:text-gold-light"
+          >
+            고객 온라인 예약 →
+          </a>
+        </div>
       </div>
     </div>
   );

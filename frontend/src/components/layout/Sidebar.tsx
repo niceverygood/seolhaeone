@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/contexts/AuthContext";
+import { LogoMark } from "@/components/brand/Logo";
 
 const nav = [
   { to: "/dashboard", label: "대시보드", icon: LayoutDashboard },
@@ -32,12 +33,15 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-[260px] shrink-0 flex-col bg-bg-primary text-text-primary">
       {/* Logo */}
-      <div className="px-7 pt-8 pb-10">
-        <div className="font-display text-2xl leading-none text-white">
-          Seolhaewon
-        </div>
-        <div className="mt-1 font-display text-sm tracking-[0.3em] text-gold">
-          雪 海 園
+      <div className="flex items-center gap-3 px-7 pt-8 pb-10">
+        <LogoMark size={32} color="#c5a55a" />
+        <div className="min-w-0">
+          <div className="font-display text-xl leading-none text-white">
+            Seolhaewon
+          </div>
+          <div className="mt-1 font-display text-[10px] tracking-[0.3em] text-gold">
+            雪 海 園
+          </div>
         </div>
       </div>
 
