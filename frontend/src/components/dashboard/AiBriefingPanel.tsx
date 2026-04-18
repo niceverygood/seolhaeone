@@ -24,6 +24,15 @@ export function AiBriefingPanel() {
             <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[11px] text-text-muted">{briefing.date}</span>
           </div>
 
+          {/* LLM 자연어 요약 (OPENROUTER_API_KEY 있을 때만) */}
+          {briefing.ai_summary && (
+            <div className="mb-4 rounded-lg border-l-[3px] border-l-gold bg-gold-bg/40 p-3">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-dark">
+                {briefing.ai_summary}
+              </p>
+            </div>
+          )}
+
           {/* Revenue summary */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-surface-light p-3">

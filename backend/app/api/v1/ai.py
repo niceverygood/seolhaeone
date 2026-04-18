@@ -1,3 +1,5 @@
+import json
+import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -11,16 +13,129 @@ from app.models.customer import Customer
 from app.models.golf import GolfCourse, GolfTeetime
 from app.models.resort import Room, RoomReservation
 from app.models.package import Package
+from app.services.openrouter import chat as llm_chat, llm_available
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+log = logging.getLogger(__name__)
 
 
 class AiQueryRequest(BaseModel):
     query: str
 
 
+def _collect_business_context(db: Session) -> dict:
+    """LLM이 참조할 현재 비즈니스 스냅샷 — 숫자가 너무 많아지지 않도록 요약."""
+    today = date.today()
+    month_start = today.replace(day=1)
+    tomorrow = today + timedelta(days=1)
+
+    # 이번 달 매출
+    stats = db.query(DailyStat).filter(
+        DailyStat.stat_date >= month_start, DailyStat.stat_date <= today
+    ).all()
+    total_rev = sum(int(s.total_revenue or 0) for s in stats)
+    golf_rev = sum(int(s.golf_revenue or 0) for s in stats)
+    room_rev = sum(int(s.room_revenue or 0) for s in stats)
+    fnb_rev = sum(int(s.fnb_revenue or 0) for s in stats)
+    oncheon_rev = sum(int(s.oncheon_revenue or 0) for s in stats)
+
+    # 코스별 이번 달 라운드
+    course_rounds = []
+    for c in db.query(GolfCourse).all():
+        cnt = db.query(GolfTeetime).filter(
+            GolfTeetime.course_id == c.id,
+            GolfTeetime.tee_date >= month_start,
+            GolfTeetime.tee_date <= today,
+            GolfTeetime.status.in_(["completed", "reserved"]),
+        ).count()
+        course_rounds.append({"course": c.name, "rounds": cnt})
+
+    # 고객 분포
+    grade_rows = db.query(Customer.grade, func.count()).group_by(Customer.grade).all()
+    grade_dist = {g: c for g, c in grade_rows}
+    total_customers = sum(grade_dist.values())
+    churn_high = db.query(Customer).filter(Customer.churn_risk >= 0.5).count()
+
+    # 예약 현황
+    tomorrow_golf = db.query(GolfTeetime).filter(
+        GolfTeetime.tee_date == tomorrow, GolfTeetime.status == "reserved",
+    ).count()
+    tomorrow_room = db.query(RoomReservation).filter(
+        RoomReservation.check_in == tomorrow, RoomReservation.status == "confirmed",
+    ).count()
+
+    # 오늘 점유율
+    today_stat = db.query(DailyStat).filter(DailyStat.stat_date == today).first()
+    occupancy = float(today_stat.room_occupancy_rate or 0) * 100 if today_stat else 0
+
+    # 노쇼 위험 건수
+    noshow_risk = db.query(GolfTeetime).filter(
+        GolfTeetime.tee_date >= today,
+        GolfTeetime.noshow_score >= 0.3,
+        GolfTeetime.status == "reserved",
+    ).count()
+
+    return {
+        "today": str(today),
+        "month_to_date_revenue": {
+            "total": total_rev, "golf": golf_rev, "room": room_rev,
+            "fnb": fnb_rev, "oncheon": oncheon_rev,
+        },
+        "course_rounds_this_month": course_rounds,
+        "customers": {
+            "total": total_customers,
+            "by_grade": grade_dist,
+            "churn_high_risk": churn_high,
+        },
+        "tomorrow_reservations": {
+            "golf": tomorrow_golf,
+            "room": tomorrow_room,
+        },
+        "today_room_occupancy_pct": round(occupancy, 1),
+        "noshow_risk_count": noshow_risk,
+        "total_rooms": db.query(Room).count(),
+        "active_packages": db.query(Package).filter(Package.is_active.is_(True)).count(),
+    }
+
+
+_LLM_SYSTEM_PROMPT = """당신은 설해원 리조트(골프+호텔+온천 복합 단지)의 AI CRM 어시스턴트입니다.
+사용자(관리자)의 질문에 한국어로 간결·실용적으로 답변하세요.
+
+답변 원칙:
+1. 제공된 JSON 데이터의 숫자를 정확히 인용할 것 (추측/창작 금지)
+2. 3~6줄로 핵심만. 불필요한 서두("안녕하세요" 등) 금지
+3. 원화 금액은 ₩1,234,567 형식
+4. 근거가 부족하면 "데이터로 확인 필요"라고 명시
+5. 가능하면 구체적 액션("○○ 캠페인 실행" 등) 1개 제안
+"""
+
+
 @router.post("/query")
 def ai_query(body: AiQueryRequest, db: Session = Depends(get_db)):
+    # ── LLM이 사용 가능하면 데이터 컨텍스트 + 질문을 넘겨 자연어 답변
+    if llm_available():
+        try:
+            ctx = _collect_business_context(db)
+            user_msg = (
+                f"[비즈니스 스냅샷 JSON]\n{json.dumps(ctx, ensure_ascii=False)}\n\n"
+                f"[질문]\n{body.query}"
+            )
+            answer = llm_chat(_LLM_SYSTEM_PROMPT, user_msg, max_tokens=500, temperature=0.3)
+            return {
+                "query_type": "llm",
+                "answer": answer,
+                "data": [],
+                "context": ctx,
+                "model": "openrouter",
+            }
+        except Exception as e:
+            # LLM 호출 실패 시 기존 rule-based로 graceful fallback
+            log.warning("LLM query failed, falling back to rule-based: %s", e)
+
+    return _rule_based_query(body, db)
+
+
+def _rule_based_query(body: AiQueryRequest, db: Session):
     q = body.query.lower()
     today = date.today()
 
@@ -416,11 +531,37 @@ def get_caddy_recommendation(customer_id: str, db: Session = Depends(get_db)):
     return recommend_caddy(cust, db)
 
 
+_BRIEFING_SYSTEM_PROMPT = """당신은 설해원 리조트 총지배인의 AI 비서입니다.
+오늘의 데이터 스냅샷 JSON을 받아 **임원 일일 브리핑**을 한국어로 작성하세요.
+
+형식 (마크다운 쓰지 말고 평문):
+1줄 요약 (매출·점유·특이사항 중 가장 중요한 1개)
+━━━━━━━━━━━━━━━━━━━━
+◆ 어제 실적: [원 단위 금액, 전일/전주 대비 한 줄 평]
+◆ 오늘 운영: [체크인/체크아웃/VIP 도착 요약]
+◆ 내일 대비: [예약 수 + 노쇼 위험 + 이탈 위험]
+◆ 우선 조치: [1~3개, 각 한 줄]
+
+원칙: 숫자 정확히 인용, 과장 금지, 길어야 10줄."""
+
+
 @router.get("/briefing")
 def get_daily_briefing(db: Session = Depends(get_db)):
-    """일일 AI 브리핑"""
+    """일일 AI 브리핑 — LLM이 있으면 자연어 summary 추가."""
     from app.services.ai_engine import generate_daily_briefing
-    return generate_daily_briefing(db)
+    briefing = generate_daily_briefing(db)
+    if llm_available():
+        try:
+            summary = llm_chat(
+                _BRIEFING_SYSTEM_PROMPT,
+                f"[오늘의 브리핑 데이터]\n{json.dumps(briefing, ensure_ascii=False, default=str)}",
+                max_tokens=450,
+                temperature=0.35,
+            )
+            briefing["ai_summary"] = summary
+        except Exception as e:
+            log.warning("briefing LLM summary failed: %s", e)
+    return briefing
 
 
 @router.get("/demand-forecast")

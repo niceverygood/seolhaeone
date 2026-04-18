@@ -19,6 +19,7 @@ type Briefing = {
     noshow_risk_bookings: number;
   };
   tasks: { priority: string; task: string }[];
+  ai_summary?: string;
 };
 
 type RevenueOptimization = {
