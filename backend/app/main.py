@@ -201,3 +201,29 @@ def bootstrap():
             "error": f"{type(e).__name__}: {str(e)[:500]}",
             "trace": traceback.format_exc()[-1000:],
         }
+
+
+@app.post("/seed-demo")
+def seed_demo():
+    """Vercel 타임아웃(60s) 안에서 돌아가는 경량 데모 시드.
+    이미 데이터가 있으면 아무 일도 하지 않음 (멱등)."""
+    if _IMPORT_ERROR:
+        return {"seeded": False, "stage": "import", "error": _IMPORT_ERROR}
+    if ENGINE_INIT_ERROR or engine is None:
+        return {"seeded": False, "stage": "engine_init", "error": ENGINE_INIT_ERROR}
+    try:
+        from app.core.seed_demo import run_demo_seed
+        Base.metadata.create_all(bind=engine)
+        session = next(get_db())
+        try:
+            summary = run_demo_seed(session)
+        finally:
+            session.close()
+        return {"seeded": True, "summary": summary}
+    except Exception as e:
+        return {
+            "seeded": False,
+            "stage": "run",
+            "error": f"{type(e).__name__}: {str(e)[:500]}",
+            "trace": traceback.format_exc()[-1200:],
+        }
