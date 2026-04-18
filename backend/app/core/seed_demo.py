@@ -47,22 +47,40 @@ BASE_PRICES = {"풀스위트": 850000, "스파스위트": 650000, "디럭스": 4
 def run_demo_seed(db: Session) -> dict:
     summary: dict = {}
 
-    # ── 이미 시드되어 있으면 skip
-    if db.query(GolfCourse).count() > 0:
+    # ── 이미 완전히 시드된 상태 감지 (courses + daily_stats 둘 다 있으면 skip)
+    courses_count = db.query(GolfCourse).count()
+    stats_count = db.query(DailyStat).count()
+    customers_count = db.query(Customer).count()
+    if courses_count > 0 and stats_count > 0 and customers_count > 0:
         return {
             "skipped": True,
             "reason": "already seeded",
             "counts": {
                 "staff": db.query(Staff).count(),
-                "courses": db.query(GolfCourse).count(),
+                "courses": courses_count,
                 "rooms": db.query(Room).count(),
-                "customers": db.query(Customer).count(),
+                "customers": customers_count,
                 "teetimes": db.query(GolfTeetime).count(),
                 "reservations": db.query(RoomReservation).count(),
-                "daily_stats": db.query(DailyStat).count(),
+                "daily_stats": stats_count,
                 "ai_logs": db.query(AiActionLog).count(),
             },
         }
+
+    # ── 부분 시드 상태면 깨끗하게 정리 (staff는 admin 계정 보존 위해 유지)
+    # FK 의존성 순서대로 삭제
+    db.query(AiActionLog).delete(synchronize_session=False)
+    db.query(DailyStat).delete(synchronize_session=False)
+    db.query(RoomReservation).delete(synchronize_session=False)
+    db.query(GolfTeetime).delete(synchronize_session=False)
+    db.query(Package).delete(synchronize_session=False)
+    db.query(Room).delete(synchronize_session=False)
+    db.query(GolfCourse).delete(synchronize_session=False)
+    db.query(Customer).delete(synchronize_session=False)
+    # Staff는 admin 외의 기존 것들(캐디 등)만 지워서 이메일 중복 충돌 방지
+    db.query(Staff).filter(Staff.email.is_(None)).delete(synchronize_session=False)
+    db.commit()
+    summary["wiped"] = True
 
     # ── 1) Staff (admin은 이미 있을 수 있음, 중복 방지)
     staff_seed = [
