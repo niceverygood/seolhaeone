@@ -75,6 +75,16 @@ AI_MEMO_SAMPLES = [
     ("조용한 층 객실 선호, 엘리베이터 인접 회피", "preference"),
     ("스파 마사지 90분 코스 재이용", "feedback"),
     ("기업 워크숍 15명, 컨퍼런스룸 포함 패키지 문의", "event"),
+    ("골프 레슨 PGA 프로 세션 관심 표명", "preference"),
+    ("주차장 EV 충전 가능 여부 문의", "feedback"),
+    ("아동 동반 — 키즈클럽 사전 예약", "preference"),
+    ("기념일(결혼) 룸 데코 요청 — 다음달 예정", "event"),
+    ("채식 메뉴 만족, 다음 방문에도 동일 요청", "feedback"),
+    ("프라이빗 라운딩 희망, 3팀 패키지 문의", "preference"),
+    ("지인 소개로 첫 방문, 온보딩 세션 필요", "feedback"),
+    ("멤버십 등급 상향 상담 요청", "event"),
+    ("사우나 이용 중 온도 컴플레인 — 후속 케어 완료", "feedback"),
+    ("연말 송년회 단체 20명 문의", "event"),
 ]
 
 SPECIAL_REQUESTS_POOL = [
@@ -86,7 +96,13 @@ SPECIAL_REQUESTS_POOL = [
     "알러지 (갑각류) — F&B 주의",
     "반려견 동반, 전용 매트 요청",
     "공항 픽업 서비스 예약",
-    None, None, None, None,  # 대부분은 요청사항 없음
+    "휠체어 접근 가능 객실 요청",
+    "EV 충전기 근접 주차 요청",
+    "객실 미니바 비알콜 음료 비치",
+    "베개 교체 요청 (메모리폼)",
+    "채식(비건) 조식 개별 준비",
+    "단체 3객실 인접 배정 요청",
+    None, None, None, None, None, None,  # 대부분은 요청사항 없음
 ]
 
 TEETIME_NOTES_POOL = [
@@ -95,7 +111,12 @@ TEETIME_NOTES_POOL = [
     "기업 행사 라운딩",
     "신혼 여행 첫 라운딩",
     "어머니 생신 기념 가족 라운딩",
-    None, None, None, None, None, None,
+    "해외 VIP — 통역 캐디 배정 요청",
+    "프로암 대회 연계 라운딩",
+    "장마철 우천 대비 — 우산/타올 추가",
+    "셀러브리티 고객 — 프라이버시 모드",
+    "신규 회원 첫 라운딩 — 온보딩 가이드",
+    None, None, None, None, None, None, None, None,
 ]
 
 
@@ -308,7 +329,7 @@ def create_packages(db: Session, courses: list[GolfCourse]) -> list[Package]:
 
 
 def create_customers(db: Session) -> list[Customer]:
-    grade_dist = [("diamond", 40), ("gold", 120), ("silver", 240), ("member", 400)]
+    grade_dist = [("diamond", 80), ("gold", 220), ("silver", 450), ("member", 750)]
     customers = []
     for grade, count in grade_dist:
         for _ in range(count):
@@ -367,12 +388,12 @@ def create_teetimes(
     db: Session, courses: list[GolfCourse], customers: list[Customer],
     caddies: list[Staff], packages: list[Package],
 ):
-    """12개월분 골프 예약 ~6,000건"""
+    """18개월분 골프 예약 ~20,000건"""
     today = date.today()
-    start = today - timedelta(days=365)
+    start = today - timedelta(days=540)
     teetimes = []
 
-    for day_offset in range(365):
+    for day_offset in range(540):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 5
         slots_per_course = random.randint(14, 20) if is_weekend else random.randint(8, 15)
@@ -430,12 +451,12 @@ def create_teetimes(
 def create_room_reservations(
     db: Session, rooms: list[Room], customers: list[Customer], packages: list[Package],
 ):
-    """12개월분 객실 예약 ~3,000건"""
+    """18개월분 객실 예약 ~4,700건"""
     today = date.today()
-    start = today - timedelta(days=365)
+    start = today - timedelta(days=540)
     reservations = []
 
-    for day_offset in range(0, 365, 1):
+    for day_offset in range(0, 540, 1):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 4  # Fri~Sun
         bookings_today = random.randint(8, 16) if is_weekend else random.randint(3, 9)
@@ -482,12 +503,12 @@ def create_room_reservations(
 
 
 def create_daily_stats(db: Session):
-    """365일분 일별 매출 통계"""
+    """540일분 일별 매출 통계 (18개월, YoY 비교 가능)"""
     today = date.today()
-    start = today - timedelta(days=365)
+    start = today - timedelta(days=540)
     stats = []
 
-    for day_offset in range(365):
+    for day_offset in range(540):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 5
         month = d.month
@@ -535,9 +556,9 @@ def create_daily_stats(db: Session):
 
 
 def create_ai_action_logs(db: Session, customers: list[Customer]):
-    """AI 액션 로그 2,500건"""
+    """AI 액션 로그 4,000건"""
     logs = []
-    for _ in range(2500):
+    for _ in range(4000):
         action_type = random.choice(ACTION_TYPES)
         status = random.choice(ACTION_STATUSES)
         result = None
@@ -570,7 +591,7 @@ def create_ai_action_logs(db: Session, customers: list[Customer]):
             status=status,
             result=result,
             created_by="ai_engine",
-            created_at=datetime.now(KST) - timedelta(hours=random.randint(1, 720)),
+            created_at=datetime.now(KST) - timedelta(hours=random.randint(1, 12960)),
         )
         logs.append(log)
     db.add_all(logs)
