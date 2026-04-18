@@ -38,6 +38,10 @@ AI_TAGS_POOL = [
     "#풀스위트_선호", "#온천_애용", "#F&B_고소비",
     "#프로모션_반응", "#캐디_지정", "#단체골프",
     "#가족동반", "#기업고객", "#장기투숙",
+    "#VIP레벨업후보", "#재방문율_높음", "#생일이벤트_참여",
+    "#와인_애호가", "#골프레슨_관심", "#스파_단골",
+    "#조용한객실_선호", "#전망좋은객실_선호", "#얼리체크인_요청",
+    "#레이트체크아웃_요청", "#유아동반", "#반려동물_동반",
 ]
 
 COURSE_NAMES = ["마운틴", "오션", "레전드"]
@@ -48,8 +52,51 @@ BUILDINGS = {
 }
 BASE_PRICES = {"풀스위트": 850000, "스파스위트": 650000, "디럭스": 450000, "레귤러": 280000}
 
+ROOM_AMENITIES = {
+    "풀스위트": ["프라이빗풀", "자쿠지", "발코니", "킹사이즈침대", "에스프레소머신", "미니바", "스마트TV", "오션뷰"],
+    "스파스위트": ["전용스파", "온천탕", "발코니", "킹사이즈침대", "미니바", "스마트TV"],
+    "디럭스": ["발코니", "퀸사이즈침대", "미니바", "스마트TV", "커피머신"],
+    "레귤러": ["퀸사이즈침대", "스마트TV", "커피포트", "냉장고"],
+}
+
 ACTION_TYPES = ["noshow_alert", "upsell", "churn_prevention", "package_recommend", "pricing", "briefing"]
 ACTION_STATUSES = ["pending", "approved", "executed", "dismissed"]
+
+AI_MEMO_SAMPLES = [
+    ("레전드코스 선호, 오전 이른 시간대 요청", "preference"),
+    ("특별한 날 방문, 서프라이즈 케이크 준비 완료", "event"),
+    ("캐디 박준형 지정 요청", "preference"),
+    ("온천 이용 후 만족도 높음", "feedback"),
+    ("단체 라운딩 10명 예정, 프로샵 사전 주문", "event"),
+    ("풀스위트 업그레이드 만족, 다음 방문 시 동일 객실 희망", "preference"),
+    ("F&B 와인 페어링 프로그램 예약", "event"),
+    ("레이트 체크아웃 요청, 허용됨", "feedback"),
+    ("가족 생일 이벤트 — 케이크 및 꽃 준비", "event"),
+    ("조용한 층 객실 선호, 엘리베이터 인접 회피", "preference"),
+    ("스파 마사지 90분 코스 재이용", "feedback"),
+    ("기업 워크숍 15명, 컨퍼런스룸 포함 패키지 문의", "event"),
+]
+
+SPECIAL_REQUESTS_POOL = [
+    "얼리 체크인 요청 (오후 1시)",
+    "레이트 체크아웃 요청 (오후 2시)",
+    "조용한 층 배정 부탁드립니다",
+    "기념일 세팅 준비 (샴페인 + 꽃)",
+    "유아용 침대 추가 요청",
+    "알러지 (갑각류) — F&B 주의",
+    "반려견 동반, 전용 매트 요청",
+    "공항 픽업 서비스 예약",
+    None, None, None, None,  # 대부분은 요청사항 없음
+]
+
+TEETIME_NOTES_POOL = [
+    "VIP 고객 — 클럽하우스 환영 안내",
+    "단체 예약 — 프로샵 사전 준비 완료",
+    "기업 행사 라운딩",
+    "신혼 여행 첫 라운딩",
+    "어머니 생신 기념 가족 라운딩",
+    None, None, None, None, None, None,
+]
 
 
 def create_staff(db: Session) -> list[Staff]:
@@ -58,13 +105,22 @@ def create_staff(db: Session) -> list[Staff]:
         ("김소연", "manager", "golf", "soyon@seolhaeone.kr"),
         ("박준형", "front_desk", "resort", "jun@seolhaeone.kr"),
         ("이하나", "manager", "fnb", "hana@seolhaeone.kr"),
+        ("최민주", "manager", "spa", "minju@seolhaeone.kr"),
+        ("정우성", "front_desk", "resort", "woosung@seolhaeone.kr"),
+        ("윤세영", "staff", "fnb", "seyoung@seolhaeone.kr"),
+        ("강태준", "staff", "golf", "taejun@seolhaeone.kr"),
+        ("서지혜", "manager", "marketing", "jihye@seolhaeone.kr"),
+        ("오현우", "staff", "housekeeping", "hyunwoo@seolhaeone.kr"),
+        ("임나래", "staff", "housekeeping", "narae@seolhaeone.kr"),
+        ("조성민", "staff", "maintenance", "sungmin@seolhaeone.kr"),
     ]
-    caddies = [(f"캐디_{i+1:02d}", "caddy", "golf", None) for i in range(15)]
+    caddies = [(f"캐디_{i+1:02d}", "caddy", "golf", None) for i in range(25)]
     all_data = staff_data + caddies
     staff = []
     for name, role, dept, email in all_data:
         s = Staff(
             name=name, role=role, department=dept, email=email,
+            phone=fake.phone_number(),
             hashed_password=hash_password("seolhae1234") if email else None,
         )
         staff.append(s)
@@ -97,6 +153,7 @@ def create_rooms(db: Session) -> list[Room]:
                     floor=floor,
                     capacity=4 if rtype == "풀스위트" else 2,
                     base_price=BASE_PRICES[rtype],
+                    amenities=ROOM_AMENITIES.get(rtype, []),
                     status="available",
                 )
                 rooms.append(r)
@@ -148,6 +205,75 @@ def create_packages(db: Session, courses: list[GolfCourse]) -> list[Package]:
             target_segment="silver",
             is_active=True,
         ),
+        Package(
+            name="VIP 2박 프리미엄",
+            description="레전드 18홀 + 오션 9홀 + 풀스위트 2박 + F&B 크레딧",
+            components=[
+                {"type": "golf", "course": "레전드", "holes": 18},
+                {"type": "golf", "course": "오션", "holes": 9},
+                {"type": "room", "building": "마운틴스테이", "room_type": "풀스위트", "nights": 2},
+                {"type": "fnb", "credit": 500000},
+            ],
+            base_price=3200000,
+            ai_generated=False,
+            target_segment="diamond",
+            is_active=True,
+        ),
+        Package(
+            name="패밀리 힐링 패키지",
+            description="마운틴 9홀 + 스파스위트 2박 + 키즈 프로그램",
+            components=[
+                {"type": "golf", "course": "마운틴", "holes": 9},
+                {"type": "room", "building": "마운틴스테이", "room_type": "스파스위트", "nights": 2},
+                {"type": "kids_program", "duration": 240},
+            ],
+            base_price=1850000,
+            ai_generated=True,
+            acceptance_rate=0.47,
+            target_segment="gold",
+            is_active=True,
+        ),
+        Package(
+            name="기업 워크숍 패키지",
+            description="단체 라운딩 + 컨퍼런스룸 + 디럭스 4박",
+            components=[
+                {"type": "golf", "course": "오션", "holes": 18, "group_size": 10},
+                {"type": "room", "building": "설해온천", "room_type": "디럭스", "nights": 4},
+                {"type": "conference", "duration": 480},
+            ],
+            base_price=8500000,
+            ai_generated=False,
+            target_segment="corporate",
+            is_active=True,
+        ),
+        Package(
+            name="허니문 로맨틱 패키지",
+            description="오션 9홀 + 풀스위트 2박 + 커플 스파 + 디너",
+            components=[
+                {"type": "golf", "course": "오션", "holes": 9},
+                {"type": "room", "building": "마운틴스테이", "room_type": "풀스위트", "nights": 2},
+                {"type": "spa", "duration": 90},
+                {"type": "dinner", "course": "tasting"},
+            ],
+            base_price=2400000,
+            ai_generated=True,
+            acceptance_rate=0.52,
+            target_segment="gold",
+            is_active=True,
+        ),
+        Package(
+            name="동계 단기 특가",
+            description="마운틴 9홀 + 레귤러 1박 (12~2월 한정)",
+            components=[
+                {"type": "golf", "course": "마운틴", "holes": 9},
+                {"type": "room", "building": "골프텔", "room_type": "레귤러", "nights": 1},
+            ],
+            base_price=350000,
+            ai_generated=True,
+            acceptance_rate=0.63,
+            target_segment="member",
+            is_active=False,
+        ),
     ]
     db.add_all(pkgs)
     db.flush()
@@ -155,7 +281,7 @@ def create_packages(db: Session, courses: list[GolfCourse]) -> list[Package]:
 
 
 def create_customers(db: Session) -> list[Customer]:
-    grade_dist = [("diamond", 10), ("gold", 30), ("silver", 60), ("member", 100)]
+    grade_dist = [("diamond", 20), ("gold", 60), ("silver", 120), ("member", 200)]
     customers = []
     for grade, count in grade_dist:
         for _ in range(count):
@@ -172,12 +298,22 @@ def create_customers(db: Session) -> list[Customer]:
                 "member": random.randint(0, 3_000_000),
             }[grade]
             churn = round(random.uniform(0, 0.3 if grade == "diamond" else 0.5 if grade == "gold" else 0.8), 2)
-            tags = random.sample(AI_TAGS_POOL, k=random.randint(1, 5))
+            tags = random.sample(AI_TAGS_POOL, k=random.randint(2, 6))
             last_visit_days = random.randint(1, 120)
+
+            memo_count = random.randint(1, 4)
+            memos = []
+            for _ in range(memo_count):
+                content, category = random.choice(AI_MEMO_SAMPLES)
+                memos.append({
+                    "date": str(date.today() - timedelta(days=random.randint(1, 180))),
+                    "content": content,
+                    "category": category,
+                })
 
             c = Customer(
                 name=fake.name(),
-                phone=fake.phone_number(),
+                phone=fake.unique.phone_number(),
                 email=fake.email() if random.random() > 0.3 else None,
                 grade=grade,
                 clv=clv,
@@ -185,20 +321,13 @@ def create_customers(db: Session) -> list[Customer]:
                 total_visits=visits,
                 last_visit_at=datetime.now(KST) - timedelta(days=last_visit_days),
                 ai_tags=tags,
-                ai_memo=[{
-                    "date": str(date.today() - timedelta(days=random.randint(1, 60))),
-                    "content": random.choice([
-                        "레전드코스 선호, 오전 이른 시간대 요청",
-                        "특별한 날 방문, 서프라이즈 케이크 준비 완료",
-                        "캐디 박준형 지정 요청",
-                        "온천 이용 후 만족도 높음",
-                        "단체 라운딩 10명 예정, 프로샵 사전 주문",
-                    ]),
-                    "category": random.choice(["preference", "event", "feedback"]),
-                }],
+                ai_memo=memos,
                 preferences={
                     "preferred_course": random.choice(COURSE_NAMES),
                     "preferred_time": random.choice(["morning", "afternoon"]),
+                    "preferred_building": random.choice(list(BUILDINGS.keys())),
+                    "dietary": random.choice([None, "vegetarian", "halal", "gluten_free"]),
+                    "wants_caddy": random.random() > 0.4,
                 },
             )
             customers.append(c)
@@ -236,6 +365,19 @@ def create_teetimes(
                 if status == "noshow" and random.random() > 0.08:
                     status = "completed"
 
+                noshow_score = round(random.uniform(0, 0.6), 2) if booked else 0
+                ai_rec = None
+                if booked and random.random() < 0.25:
+                    ai_rec = {
+                        "recommendation": random.choice([
+                            "캐디 지정 제안",
+                            "라운딩 후 F&B 패키지 업셀",
+                            "레이트 체크아웃 번들 제안",
+                            "클럽 렌탈 사전 확인 필요",
+                        ]),
+                        "confidence": round(random.uniform(0.6, 0.95), 2),
+                    }
+
                 tt = GolfTeetime(
                     course_id=course.id,
                     tee_date=d,
@@ -244,8 +386,10 @@ def create_teetimes(
                     customer_id=cust.id if cust else None,
                     party_size=random.choice([2, 3, 4, 4, 4]),
                     caddy_id=random.choice(caddies).id if booked and random.random() > 0.3 else None,
-                    noshow_score=round(random.uniform(0, 0.6), 2) if booked else 0,
+                    noshow_score=noshow_score,
                     package_id=random.choice(packages).id if booked and random.random() < 0.15 else None,
+                    ai_recommendation=ai_rec,
+                    notes=random.choice(TEETIME_NOTES_POOL) if booked else None,
                     booked_at=datetime.now(KST) - timedelta(days=random.randint(1, 30)) if booked else None,
                 )
                 teetimes.append(tt)
@@ -277,6 +421,19 @@ def create_room_reservations(
             nights = random.choice([1, 1, 1, 2, 2, 3])
             status = "checked_out" if d + timedelta(days=nights) < today else "confirmed"
 
+            upsell = None
+            if random.random() < 0.25:
+                upsell = {
+                    "offered": random.choice([
+                        "객실 업그레이드 (디럭스 → 스파스위트)",
+                        "조식 뷔페 추가",
+                        "스파 90분 패키지",
+                        "레이트 체크아웃",
+                    ]),
+                    "accepted": random.random() < 0.4,
+                    "amount": random.choice([50000, 80000, 150000, 250000]),
+                }
+
             r = RoomReservation(
                 room_id=room.id,
                 customer_id=cust.id,
@@ -286,6 +443,8 @@ def create_room_reservations(
                 total_price=int(room.base_price) * nights,
                 dynamic_price_applied=random.random() < 0.2,
                 package_id=random.choice(packages).id if random.random() < 0.12 else None,
+                upsell_offered=upsell,
+                special_requests=random.choice(SPECIAL_REQUESTS_POOL),
             )
             reservations.append(r)
 
@@ -311,6 +470,18 @@ def create_daily_stats(db: Session):
         fnb_rev = int(random.uniform(800_000, 3_000_000) * multiplier)
         oncheon_rev = int(random.uniform(500_000, 2_000_000) * multiplier)
 
+        forecast = None
+        if d >= today - timedelta(days=14):
+            forecast = {
+                "predicted_revenue": int((golf_rev + room_rev + fnb_rev + oncheon_rev) * random.uniform(0.95, 1.1)),
+                "confidence": round(random.uniform(0.7, 0.92), 2),
+                "model_version": "v1.3.2",
+                "factors": random.sample(
+                    ["주말효과", "프로모션", "날씨", "단체예약", "시즌성"],
+                    k=random.randint(1, 3),
+                ),
+            }
+
         s = DailyStat(
             stat_date=d,
             golf_revenue=golf_rev,
@@ -324,6 +495,7 @@ def create_daily_stats(db: Session):
             noshow_count=random.randint(0, 3),
             new_customers=random.randint(0, 5),
             returning_customers=random.randint(5, 25),
+            ai_forecast=forecast,
         )
         stats.append(s)
 
@@ -333,11 +505,21 @@ def create_daily_stats(db: Session):
 
 
 def create_ai_action_logs(db: Session, customers: list[Customer]):
-    """AI 액션 로그 500건"""
+    """AI 액션 로그 1,000건"""
     logs = []
-    for _ in range(500):
+    for _ in range(1000):
+        action_type = random.choice(ACTION_TYPES)
+        status = random.choice(ACTION_STATUSES)
+        result = None
+        if status == "executed":
+            result = {
+                "outcome": random.choice(["success", "partial", "no_response"]),
+                "impact_value": random.randint(50_000, 3_000_000),
+                "executed_at": (datetime.now(KST) - timedelta(hours=random.randint(1, 240))).isoformat(),
+            }
+
         log = AiActionLog(
-            action_type=random.choice(ACTION_TYPES),
+            action_type=action_type,
             target_customer_id=random.choice(customers).id if random.random() > 0.2 else None,
             payload={
                 "reason": random.choice([
@@ -347,9 +529,16 @@ def create_ai_action_logs(db: Session, customers: list[Customer]):
                     "풀스위트 업그레이드 제안",
                     "동적가격 적용 — 주말 +15%",
                     "일일 브리핑 생성",
+                    "생일 이벤트 쿠폰 발송",
+                    "골프 세션 후 F&B 업셀",
+                    "유사 고객군 패턴 기반 추천",
+                    "경쟁 리조트 대비 가격 조정",
                 ]),
+                "confidence": round(random.uniform(0.55, 0.95), 2),
+                "source_model": random.choice(["churn_v2", "upsell_v3", "pricing_v1", "forecast_v2"]),
             },
-            status=random.choice(ACTION_STATUSES),
+            status=status,
+            result=result,
             created_by="ai_engine",
             created_at=datetime.now(KST) - timedelta(hours=random.randint(1, 720)),
         )
