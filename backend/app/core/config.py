@@ -21,7 +21,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:5180",
         "https://niceverygood.github.io",
+        "https://seolhaeone.vercel.app",
     ]
+    # 추가로 *.vercel.app 프리뷰 배포를 허용하기 위한 정규식
+    CORS_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
