@@ -1,4 +1,25 @@
-const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
+/**
+ * API base URL 결정 규칙 (모두 런타임에 동작):
+ * 1) VITE_API_URL이 빌드 시 주입돼 있으면 그 값 사용 (강제 override용)
+ * 2) hostname이 *.github.io → Vercel 백엔드로 절대 경로 (CORS 교차 요청)
+ * 3) hostname이 *.vercel.app → Vercel 서비스 내부 /_/backend 라우트
+ * 4) 그 외(로컬) → /api/v1 (vite dev proxy가 :8000으로 포워드)
+ */
+const VERCEL_BACKEND_ABS = "https://seolhaeone.vercel.app/_/backend/api/v1";
+const VERCEL_BACKEND_REL = "/_/backend/api/v1";
+
+function detectApiBase(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host.endsWith(".github.io")) return VERCEL_BACKEND_ABS;
+    if (host.endsWith(".vercel.app")) return VERCEL_BACKEND_REL;
+  }
+  return "/api/v1";
+}
+
+const API_BASE = detectApiBase();
 
 export class ApiError extends Error {
   status: number;
