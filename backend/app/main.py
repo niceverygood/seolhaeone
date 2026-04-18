@@ -203,6 +203,7 @@ def bootstrap():
         }
 
 
+@app.get("/seed-demo")
 @app.post("/seed-demo")
 def seed_demo():
     """Vercel 타임아웃(60s) 안에서 돌아가는 경량 데모 시드.
