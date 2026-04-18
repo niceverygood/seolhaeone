@@ -1,16 +1,12 @@
 import os
+import sys
 import traceback
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 
-from app.api.v1 import ai, auth, customers, dashboard, golf, public, resort
 from app.core.config import settings
-from app.core.database import Base, engine, get_db
-from app.core.security import hash_password
-from app.models.staff import Staff
 
 app = FastAPI(title=settings.PROJECT_NAME, docs_url="/docs", openapi_url="/openapi.json")
 
@@ -23,82 +19,114 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount routers
-for r in (auth.router, dashboard.router, golf.router, resort.router, customers.router, ai.router, public.router):
-    app.include_router(r, prefix=settings.API_V1_PREFIX)
 
-
+# ─── 최소 진단: DB 안 건드림 ──────────────────────────────────────────
 @app.get("/health")
 def health():
     return {"status": "ok", "service": settings.PROJECT_NAME}
 
 
 def _safe_db_host() -> str:
-    """DATABASE_URL에서 비밀번호를 제외한 host 정보만 노출."""
     try:
         u = urlparse(os.environ.get("DATABASE_URL") or settings.DATABASE_URL)
-        return f"{u.hostname}:{u.port}/{u.path.lstrip('/')}"
-    except Exception:
-        return "<unparseable>"
+        host = u.hostname or "?"
+        port = u.port or "?"
+        path = (u.path or "").lstrip("/")
+        return f"{host}:{port}/{path}"
+    except Exception as e:
+        return f"<unparseable: {e}>"
+
+
+@app.get("/debug-env")
+def debug_env():
+    """DB/라우터 import 전에 실행 가능한 최소 진단."""
+    return {
+        "python": sys.version.split()[0],
+        "cwd": os.getcwd(),
+        "DATABASE_URL_set": bool(os.environ.get("DATABASE_URL")),
+        "DATABASE_URL_host": _safe_db_host(),
+        "SECRET_KEY_set": bool(os.environ.get("SECRET_KEY")),
+    }
+
+
+# ─── DB 및 라우터 import는 try로 감싸 실패 원인을 API로 노출 ──────────
+_IMPORT_ERROR: str | None = None
+try:
+    from sqlalchemy import inspect, text
+
+    from app.api.v1 import ai, auth, customers, dashboard, golf, public, resort
+    from app.core.database import (
+        ENGINE_INIT_ERROR,
+        Base,
+        engine,
+        get_db,
+    )
+    from app.core.security import hash_password
+    from app.models.staff import Staff
+
+    # Mount routers (DB import 성공 시에만)
+    for r in (auth.router, dashboard.router, golf.router, resort.router, customers.router, ai.router, public.router):
+        app.include_router(r, prefix=settings.API_V1_PREFIX)
+
+except Exception as e:
+    _IMPORT_ERROR = f"{type(e).__name__}: {e}\n{traceback.format_exc()[-1500:]}"
 
 
 @app.get("/diag")
 def diag():
-    """배포 환경 진단 — 어디서 깨졌는지 한 번에 본다."""
+    """import 단계 실패 / DB 연결 실패 / 테이블 미존재 / admin 미존재 — 한 번에 식별."""
     result: dict = {
-        "env": {
-            "DATABASE_URL_set": bool(os.environ.get("DATABASE_URL")),
-            "DATABASE_URL_host": _safe_db_host(),
-            "SECRET_KEY_set": bool(os.environ.get("SECRET_KEY")),
-        },
+        "env": debug_env(),
+        "import_error": _IMPORT_ERROR,
     }
-    # 1) Can connect?
+    if _IMPORT_ERROR:
+        return result
+    # 여기서부터는 import가 성공한 상태
+    result["engine_init_error"] = ENGINE_INIT_ERROR
+    if ENGINE_INIT_ERROR or engine is None:
+        return result
+
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         result["db_connect"] = "ok"
     except Exception as e:
         result["db_connect"] = "FAIL"
-        result["db_connect_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+        result["db_connect_error"] = f"{type(e).__name__}: {str(e)[:400]}"
         return result
 
-    # 2) Tables exist?
     try:
         insp = inspect(engine)
         tables = insp.get_table_names()
         result["tables"] = sorted(tables)
         result["staff_table_exists"] = "staff" in tables
     except Exception as e:
-        result["inspect_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+        result["inspect_error"] = f"{type(e).__name__}: {str(e)[:400]}"
         return result
 
-    # 3) Staff/admin status
     try:
         session = next(get_db())
         try:
-            count = session.query(Staff).count() if "staff" in tables else 0
-            admin = (
-                session.query(Staff).filter(Staff.email == "admin@seolhaeone.kr").first()
-                if "staff" in tables else None
-            )
-            result["staff_count"] = count
-            result["admin_exists"] = bool(admin)
-            if admin:
-                result["admin_has_password"] = bool(admin.hashed_password)
+            if "staff" in tables:
+                result["staff_count"] = session.query(Staff).count()
+                admin = session.query(Staff).filter(Staff.email == "admin@seolhaeone.kr").first()
+                result["admin_exists"] = bool(admin)
+                if admin:
+                    result["admin_has_password"] = bool(admin.hashed_password)
         finally:
             session.close()
     except Exception as e:
-        result["staff_query_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+        result["staff_query_error"] = f"{type(e).__name__}: {str(e)[:400]}"
     return result
 
 
 @app.post("/bootstrap")
 def bootstrap():
-    """
-    최초 1회 호출 시 테이블 생성 + 기본 admin 계정 생성.
-    멱등 — 이미 staff가 있으면 계정은 건드리지 않음.
-    실패 시 500이 아니라 에러 내용을 JSON으로 돌려줌 (디버깅 용이).
-    """
+    """최초 1회: 테이블 생성 + 기본 admin 계정. 멱등."""
+    if _IMPORT_ERROR:
+        return {"bootstrapped": False, "stage": "import", "error": _IMPORT_ERROR}
+    if ENGINE_INIT_ERROR or engine is None:
+        return {"bootstrapped": False, "stage": "engine_init", "error": ENGINE_INIT_ERROR}
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
