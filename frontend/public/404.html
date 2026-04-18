@@ -4,17 +4,23 @@
     <meta charset="utf-8" />
     <title>설해원 AI CRM</title>
     <script>
-      // SPA redirect for GitHub Pages
-      // Converts path to query string so index.html can restore it
-      var pathSegmentsToKeep = 1; // /seolhaeone/
-      var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+      // SPA redirect for GitHub Pages only
+      // On Vercel (or any other host) we let the platform's own SPA rewrites work.
+      (function () {
+        var l = window.location;
+        if (!/\.github\.io$/.test(l.hostname)) {
+          l.replace(l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/');
+          return;
+        }
+        var pathSegmentsToKeep = 1; // /seolhaeone/
+        l.replace(
+          l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+          l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+          l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+        );
+      })();
     </script>
   </head>
   <body></body>

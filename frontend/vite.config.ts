@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
 export default defineConfig({
-  base: '/seolhaeone/',
+  base: process.env.VITE_BASE_URL ?? '/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

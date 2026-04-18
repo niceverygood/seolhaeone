@@ -94,7 +94,7 @@ export default function Login() {
             기본 계정: admin@seolhaeone.kr / seolhae1234
           </p>
           <a
-            href="/seolhaeone/reserve"
+            href={`${import.meta.env.BASE_URL}reserve`}
             className="inline-block text-sm font-medium text-gold hover:text-gold-light"
           >
             고객 온라인 예약 →
