@@ -42,6 +42,10 @@ AI_TAGS_POOL = [
     "#와인_애호가", "#골프레슨_관심", "#스파_단골",
     "#조용한객실_선호", "#전망좋은객실_선호", "#얼리체크인_요청",
     "#레이트체크아웃_요청", "#유아동반", "#반려동물_동반",
+    "#해외고객", "#SNS영향력", "#프리미엄F&B",
+    "#카트관심_낮음", "#가격민감", "#할인쿠폰_선호",
+    "#첫방문_2023", "#이탈위험_고", "#환불이력있음",
+    "#추천인_유입", "#기념일_관리",
 ]
 
 COURSE_NAMES = ["마운틴", "오션", "레전드"]
@@ -135,7 +139,7 @@ def create_staff(db: Session) -> list[Staff]:
         ("임나래", "staff", "housekeeping", "narae@seolhaeone.kr"),
         ("조성민", "staff", "maintenance", "sungmin@seolhaeone.kr"),
     ]
-    caddies = [(f"캐디_{i+1:02d}", "caddy", "golf", None) for i in range(40)]
+    caddies = [(f"캐디_{i+1:02d}", "caddy", "golf", None) for i in range(60)]
     all_data = staff_data + caddies
     staff = []
     for name, role, dept, email in all_data:
@@ -329,7 +333,7 @@ def create_packages(db: Session, courses: list[GolfCourse]) -> list[Package]:
 
 
 def create_customers(db: Session) -> list[Customer]:
-    grade_dist = [("diamond", 80), ("gold", 220), ("silver", 450), ("member", 750)]
+    grade_dist = [("diamond", 130), ("gold", 380), ("silver", 750), ("member", 1240)]
     customers = []
     for grade, count in grade_dist:
         for _ in range(count):
@@ -388,12 +392,12 @@ def create_teetimes(
     db: Session, courses: list[GolfCourse], customers: list[Customer],
     caddies: list[Staff], packages: list[Package],
 ):
-    """18개월분 골프 예약 ~20,000건"""
+    """24개월분 골프 예약 ~28,000건"""
     today = date.today()
-    start = today - timedelta(days=540)
+    start = today - timedelta(days=720)
     teetimes = []
 
-    for day_offset in range(540):
+    for day_offset in range(720):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 5
         slots_per_course = random.randint(14, 20) if is_weekend else random.randint(8, 15)
@@ -451,12 +455,12 @@ def create_teetimes(
 def create_room_reservations(
     db: Session, rooms: list[Room], customers: list[Customer], packages: list[Package],
 ):
-    """18개월분 객실 예약 ~4,700건"""
+    """24개월분 객실 예약 ~6,200건"""
     today = date.today()
-    start = today - timedelta(days=540)
+    start = today - timedelta(days=720)
     reservations = []
 
-    for day_offset in range(0, 540, 1):
+    for day_offset in range(0, 720, 1):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 4  # Fri~Sun
         bookings_today = random.randint(8, 16) if is_weekend else random.randint(3, 9)
@@ -503,12 +507,12 @@ def create_room_reservations(
 
 
 def create_daily_stats(db: Session):
-    """540일분 일별 매출 통계 (18개월, YoY 비교 가능)"""
+    """720일분 일별 매출 통계 (24개월, YoY 비교 가능)"""
     today = date.today()
-    start = today - timedelta(days=540)
+    start = today - timedelta(days=720)
     stats = []
 
-    for day_offset in range(540):
+    for day_offset in range(720):
         d = start + timedelta(days=day_offset)
         is_weekend = d.weekday() >= 5
         month = d.month
@@ -556,9 +560,9 @@ def create_daily_stats(db: Session):
 
 
 def create_ai_action_logs(db: Session, customers: list[Customer]):
-    """AI 액션 로그 4,000건"""
+    """AI 액션 로그 6,000건"""
     logs = []
-    for _ in range(4000):
+    for _ in range(6000):
         action_type = random.choice(ACTION_TYPES)
         status = random.choice(ACTION_STATUSES)
         result = None
@@ -591,7 +595,7 @@ def create_ai_action_logs(db: Session, customers: list[Customer]):
             status=status,
             result=result,
             created_by="ai_engine",
-            created_at=datetime.now(KST) - timedelta(hours=random.randint(1, 12960)),
+            created_at=datetime.now(KST) - timedelta(hours=random.randint(1, 17280)),
         )
         logs.append(log)
     db.add_all(logs)
