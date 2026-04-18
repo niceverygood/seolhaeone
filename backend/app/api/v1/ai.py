@@ -431,3 +431,54 @@ def get_demand_forecast(
     """수요 예측"""
     from app.services.ai_engine import forecast_demand
     return forecast_demand(db, target_date)
+
+
+# ─── AI Action 응답 (승인 / 수정 / 무시) ─────────────────────────────
+class ActionRespondRequest(BaseModel):
+    suggestion_id: str  # "sug-churn" 같은 문자열 ID 또는 DB action UUID
+    status: str  # "approved" | "executed" | "dismissed"
+    note: str | None = None
+
+
+@router.post("/actions/respond")
+def respond_to_action(body: ActionRespondRequest, db: Session = Depends(get_db)):
+    """
+    AI 제안(sug-*) 또는 기존 AiActionLog에 대한 사용자 응답을 기록.
+
+    - 입력 id가 DB AiActionLog.id(UUID) 형태면 해당 행의 status 업데이트
+    - 아니면 새 AiActionLog 항목을 생성 (payload에 원래 suggestion_id 기록)
+    """
+    from uuid import UUID as UUIDType
+    from datetime import datetime, timezone
+
+    if body.status not in ("approved", "executed", "dismissed"):
+        from fastapi import HTTPException
+        raise HTTPException(400, f"invalid status: {body.status}")
+
+    # 기존 log 업데이트 시도
+    try:
+        uid = UUIDType(body.suggestion_id)
+        existing = db.query(AiActionLog).filter(AiActionLog.id == uid).first()
+        if existing:
+            existing.status = body.status
+            existing.result = {
+                "responded_at": datetime.now(timezone.utc).isoformat(),
+                "note": body.note,
+            }
+            db.commit()
+            return {"ok": True, "action_id": str(existing.id), "mode": "updated"}
+    except (ValueError, TypeError):
+        pass
+
+    # 새 로그 생성 (클라이언트 사이드 제안에 대한 응답)
+    new_log = AiActionLog(
+        action_type="suggestion_response",
+        payload={"suggestion_id": body.suggestion_id, "note": body.note},
+        status=body.status,
+        created_by="user",
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(new_log)
+    return {"ok": True, "action_id": str(new_log.id), "mode": "created"}
+

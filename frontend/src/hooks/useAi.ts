@@ -26,3 +26,16 @@ export function useAiQuery() {
 export function useAiSuggestions() {
   return useFetch<AiSuggestion[]>("/ai/suggestions");
 }
+
+export type ActionStatus = "approved" | "executed" | "dismissed";
+
+export function respondToAction(
+  suggestionId: string,
+  status: ActionStatus,
+  note?: string,
+) {
+  return api.post<{ ok: boolean; action_id: string; mode: string }>(
+    "/ai/actions/respond",
+    { suggestion_id: suggestionId, status, note },
+  );
+}

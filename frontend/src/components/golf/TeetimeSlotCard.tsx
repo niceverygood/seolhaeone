@@ -2,7 +2,10 @@ import { AlertTriangle, Diamond, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { TeetimeResponse } from "@/lib/types";
 
-type Props = { slot: TeetimeResponse };
+type Props = {
+  slot: TeetimeResponse;
+  onReserveClick?: (slot: TeetimeResponse) => void;
+};
 
 const gradeBadge: Record<string, string> = {
   diamond: "bg-gold text-text-on-gold",
@@ -11,18 +14,22 @@ const gradeBadge: Record<string, string> = {
   member: "bg-border-light text-text-muted",
 };
 
-export function TeetimeSlotCard({ slot }: Props) {
+export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
   const isBooked = slot.status === "reserved" || slot.status === "completed";
   const isHighRisk = slot.noshow_score > 0.3;
   const isVip = slot.customer_grade === "diamond" || slot.customer_grade === "gold";
 
   if (!isBooked) {
     return (
-      <div className="group flex h-full min-h-[68px] flex-col items-center justify-center rounded-lg border border-dashed border-border-light bg-surface-white transition-colors hover:border-gold hover:bg-gold-bg/40">
-        <button className="text-xs text-text-muted group-hover:text-gold-dark">
+      <button
+        type="button"
+        onClick={() => onReserveClick?.(slot)}
+        className="group flex h-full min-h-[68px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-border-light bg-surface-white transition-colors hover:border-gold hover:bg-gold-bg/40"
+      >
+        <span className="text-xs text-text-muted group-hover:text-gold-dark">
           + 예약하기
-        </button>
-      </div>
+        </span>
+      </button>
     );
   }
 

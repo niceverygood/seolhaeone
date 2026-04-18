@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { useCourses, useTeetimes } from "@/hooks/useGolf";
 import { TeetimeSlotCard } from "@/components/golf/TeetimeSlotCard";
 import { GolfAiPanel } from "@/components/golf/GolfAiPanel";
+import { ReserveTeetimeModal } from "@/components/golf/ReserveTeetimeModal";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import type { TeetimeResponse } from "@/lib/types";
@@ -32,7 +33,9 @@ export default function Golf() {
 
   const courseId = activeCourseId ?? courses?.[0]?.id ?? "";
   const dateStr = toDateStr(selectedDate);
-  const { data: teetimes, loading: ttLoading } = useTeetimes(dateStr, courseId || undefined);
+  const { data: teetimes, loading: ttLoading, refetch: refetchTeetimes } =
+    useTeetimes(dateStr, courseId || undefined);
+  const [reservingSlot, setReservingSlot] = useState<TeetimeResponse | null>(null);
 
   const slotMap = useMemo(() => {
     const map = new Map<string, TeetimeResponse>();
@@ -146,7 +149,7 @@ export default function Golf() {
                     </div>
                     <div className="p-1.5">
                       {slot ? (
-                        <TeetimeSlotCard slot={slot} />
+                        <TeetimeSlotCard slot={slot} onReserveClick={setReservingSlot} />
                       ) : (
                         <div className="flex h-full min-h-[68px] items-center justify-center rounded-lg border border-dashed border-border-light bg-surface-white text-xs text-text-muted">
                           -
@@ -164,6 +167,14 @@ export default function Golf() {
           <GolfAiPanel />
         </div>
       </div>
+
+      {reservingSlot && (
+        <ReserveTeetimeModal
+          slot={reservingSlot}
+          onClose={() => setReservingSlot(null)}
+          onReserved={() => refetchTeetimes()}
+        />
+      )}
     </div>
   );
 }

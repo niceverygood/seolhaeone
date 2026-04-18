@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Bot, Check, Flag, BedDouble, Flame,
-  Pencil, X, MessageSquare,
+  ArrowLeft, Bot, Flag, BedDouble, Flame,
+  MessageSquare,
 } from "lucide-react";
+import { AiActionButtons } from "@/components/ai/AiActionButtons";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
@@ -212,39 +213,59 @@ export default function CustomerProfile() {
             )}
 
             {activeTab === "AI 추천 액션" && (
-              <div className="space-y-3">
-                {(aiActions ?? []).length === 0 ? (
-                  <p className="py-8 text-center text-sm text-text-muted">추천 액션이 없습니다.</p>
-                ) : (
-                  (aiActions ?? []).map((a) => (
-                    <div key={a.id} className="rounded-lg border-l-[3px] border-l-gold bg-gold-bg/40 p-4">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Bot className="h-4 w-4 shrink-0 text-gold-dark" />
-                        <span className="text-sm font-semibold leading-snug text-text-dark">{a.type}</span>
-                      </div>
-                      <p className="mb-3 text-sm text-text-muted">{a.detail}</p>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="whitespace-nowrap font-mono text-xs text-gold-dark">{a.impact && `▲ ${a.impact}`}</span>
-                        <div className="flex flex-wrap gap-1">
-                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-gold px-2.5 text-xs font-medium text-text-on-gold hover:bg-gold-dark">
-                            <Check className="h-3 w-3" /> 승인
-                          </button>
-                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-dark hover:bg-surface-light">
-                            <Pencil className="h-3 w-3" /> 수정
-                          </button>
-                          <button className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border-light bg-surface-white px-2.5 text-xs text-text-muted hover:bg-surface-light">
-                            <X className="h-3 w-3" /> 무시
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <CustomerAiActionsPanel
+                actions={aiActions ?? []}
+              />
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+type AiAction = {
+  id: string;
+  type: string;
+  detail: string;
+  impact?: string;
+  status?: string;
+};
+
+function CustomerAiActionsPanel({ actions }: { actions: AiAction[] }) {
+  const [respondedIds, setRespondedIds] = useState<Set<string>>(new Set());
+  const visible = actions.filter((a) => !respondedIds.has(a.id));
+
+  if (visible.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-text-muted">
+        {actions.length === 0 ? "추천 액션이 없습니다." : "모든 액션을 처리했습니다."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {visible.map((a) => (
+        <div key={a.id} className="rounded-lg border-l-[3px] border-l-gold bg-gold-bg/40 p-4">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <Bot className="h-4 w-4 shrink-0 text-gold-dark" />
+            <span className="text-sm font-semibold leading-snug text-text-dark">{a.type}</span>
+          </div>
+          <p className="mb-3 text-sm text-text-muted">{a.detail}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="whitespace-nowrap font-mono text-xs text-gold-dark">
+              {a.impact && `▲ ${a.impact}`}
+            </span>
+            <AiActionButtons
+              suggestionId={a.id}
+              onResponded={() =>
+                setRespondedIds((s) => new Set(s).add(a.id))
+              }
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
