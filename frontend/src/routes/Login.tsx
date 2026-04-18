@@ -22,9 +22,10 @@ export default function Login() {
       navigate("/dashboard", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.status === 401 ? "이메일 또는 비밀번호가 올바르지 않습니다." : err.message);
+        if (err.status === 401) setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+        else setError(`[${err.status}] ${err.message}`);
       } else {
-        setError("서버에 연결할 수 없습니다.");
+        setError(`서버에 연결할 수 없습니다: ${err instanceof Error ? err.message : String(err)}`);
       }
     } finally {
       setSubmitting(false);

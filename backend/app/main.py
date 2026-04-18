@@ -1,10 +1,12 @@
 import os
+import re
 import sys
 import traceback
 from urllib.parse import urlparse
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 
@@ -18,6 +20,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─── 전역 예외 핸들러 ─────────────────────────────────────────────────
+# 어떤 예외가 터지더라도 JSON + CORS 헤더 포함 응답을 돌려준다.
+# (Serverless 크래시 시 Vercel이 자기 500 페이지를 내면 CORS가 빠져 브라우저가
+#  원인조차 못 읽으므로 FastAPI 레벨에서 반드시 가로챈다)
+_ORIGIN_REGEX = re.compile(settings.CORS_ORIGIN_REGEX) if settings.CORS_ORIGIN_REGEX else None
+
+
+def _cors_headers_for(request: Request) -> dict:
+    origin = request.headers.get("origin", "")
+    allowed = False
+    if origin in settings.CORS_ORIGINS:
+        allowed = True
+    elif _ORIGIN_REGEX and _ORIGIN_REGEX.match(origin):
+        allowed = True
+    if not allowed:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin",
+    }
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"{type(exc).__name__}: {str(exc)[:400]}",
+            "trace": traceback.format_exc()[-800:],
+        },
+        headers=_cors_headers_for(request),
+    )
 
 
 # ─── 최소 진단: DB 안 건드림 ──────────────────────────────────────────

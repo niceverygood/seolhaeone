@@ -7,9 +7,13 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 
-def _ensure_sslmode(url: str) -> str:
-    """매니지드 Postgres(Supabase/Neon 등)는 SSL 필수.
-    URL에 이미 지정됐거나 localhost면 그대로 둔다."""
+def _normalize_db_url(url: str) -> str:
+    """환경변수에서 올 수 있는 양끝 공백/탭/따옴표 제거.
+    매니지드 Postgres는 SSL 필수이므로 sslmode=require도 자동 부여."""
+    url = (url or "").strip().strip('"').strip("'")
+    # postgres:// → postgresql:// (SQLAlchemy는 둘 다 인식하지만 명시적으로)
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
     if "sslmode=" in url:
         return url
     if "localhost" in url or "127.0.0.1" in url:
@@ -28,7 +32,7 @@ ENGINE_INIT_ERROR: str | None = None
 
 try:
     engine = create_engine(
-        _ensure_sslmode(settings.DATABASE_URL),
+        _normalize_db_url(settings.DATABASE_URL),
         echo=False,
         poolclass=NullPool,  # Serverless: 풀 유지 불가, Pooler 측이 담당
         pool_pre_ping=True,
