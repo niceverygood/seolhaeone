@@ -14,12 +14,11 @@ export default function Login() {
 
   if (user) return <Navigate to="/dashboard" replace />;
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const doLogin = async (loginEmail: string, loginPassword: string) => {
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(loginEmail, loginPassword);
       navigate("/dashboard", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -30,6 +29,17 @@ export default function Login() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    void doLogin(email, password);
+  };
+
+  const handleTestLogin = () => {
+    setEmail("admin@seolhaeone.kr");
+    setPassword("seolhae1234");
+    void doLogin("admin@seolhaeone.kr", "seolhae1234");
   };
 
   return (
@@ -86,6 +96,15 @@ export default function Login() {
             className="h-11 w-full rounded-lg bg-gold text-sm font-semibold text-text-on-gold transition-colors hover:bg-gold-dark disabled:opacity-50"
           >
             {submitting ? "로그인 중..." : "로그인"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTestLogin}
+            disabled={submitting}
+            className="h-10 w-full rounded-lg border border-gold/40 bg-transparent text-xs font-medium text-gold transition-colors hover:bg-gold/10 disabled:opacity-50"
+          >
+            테스트 계정으로 바로 로그인
           </button>
         </form>
 
