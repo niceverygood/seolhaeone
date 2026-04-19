@@ -63,6 +63,21 @@ def health():
     return {"status": "ok", "service": settings.PROJECT_NAME}
 
 
+@app.get("/warmup")
+def warmup():
+    """로그인 전 콜드스타트 완화용. DB 커넥션을 pool에 미리 확보해
+    후속 요청의 SSL 핸드셰이크 비용을 없앰. 실패해도 조용히 ok."""
+    try:
+        from sqlalchemy import text as _text
+        from app.core.database import engine as _eng
+        if _eng is not None:
+            with _eng.connect() as conn:
+                conn.execute(_text("SELECT 1"))
+        return {"warm": True}
+    except Exception as e:  # noqa: BLE001
+        return {"warm": False, "reason": f"{type(e).__name__}: {str(e)[:100]}"}
+
+
 def _safe_db_host() -> str:
     try:
         u = urlparse(os.environ.get("DATABASE_URL") or settings.DATABASE_URL)

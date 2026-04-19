@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { LogoMark } from "@/components/brand/Logo";
 
 export default function Login() {
@@ -11,6 +11,12 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // 콜드스타트 완화 — 페이지 진입 시 백엔드와 DB 커넥션 풀을 미리 깨워둠.
+  // 사용자가 비밀번호 입력하는 동안 서버 + SSL 핸드셰이크 + 커넥션 준비 완료.
+  useEffect(() => {
+    void api.get("/auth/warmup").catch(() => {});
+  }, []);
 
   if (user) return <Navigate to="/dashboard" replace />;
 

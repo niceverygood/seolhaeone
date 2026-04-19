@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
@@ -11,7 +11,6 @@ def _normalize_db_url(url: str) -> str:
     """환경변수에서 올 수 있는 양끝 공백/탭/따옴표 제거.
     매니지드 Postgres는 SSL 필수이므로 sslmode=require도 자동 부여."""
     url = (url or "").strip().strip('"').strip("'")
-    # postgres:// → postgresql:// (SQLAlchemy는 둘 다 인식하지만 명시적으로)
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
     if "sslmode=" in url:
@@ -26,15 +25,20 @@ class Base(DeclarativeBase):
     pass
 
 
-# 엔진 생성 실패를 import 단계에서 노출되지 않도록 방어.
-# 실패 시 ENGINE_INIT_ERROR에 원인이 담기고, engine은 None.
 ENGINE_INIT_ERROR: str | None = None
 
 try:
+    # Vercel Serverless: 컨테이너가 워밍된 동안 여러 요청을 처리하므로
+    # 1~2개의 커넥션을 재사용하면 SSL 핸드셰이크 비용을 크게 절약할 수 있다.
+    # Supabase Transaction Pooler가 상위에서 실제 커넥션을 관리하므로 안전.
+    # pool_recycle: Supabase idle timeout(10분) 전에 재연결하여 broken pipe 방지.
     engine = create_engine(
         _normalize_db_url(settings.DATABASE_URL),
         echo=False,
-        poolclass=NullPool,  # Serverless: 풀 유지 불가, Pooler 측이 담당
+        poolclass=QueuePool,
+        pool_size=1,
+        max_overflow=2,
+        pool_recycle=540,
         pool_pre_ping=True,
     )
 except Exception as e:  # pragma: no cover

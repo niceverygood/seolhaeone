@@ -15,6 +15,21 @@ from app.schemas.auth import LoginRequest, StaffProfile, Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+@router.get("/warmup", include_in_schema=False)
+def warmup():
+    """로그인 직전 백엔드와 DB 커넥션 풀을 미리 깨워두는 경량 요청.
+    실패해도 200으로 응답하여 프론트 polling 차단 방지."""
+    try:
+        from sqlalchemy import text as _text
+        from app.core.database import engine as _eng
+        if _eng is not None:
+            with _eng.connect() as conn:
+                conn.execute(_text("SELECT 1"))
+        return {"warm": True}
+    except Exception as e:  # noqa: BLE001
+        return {"warm": False, "reason": f"{type(e).__name__}: {str(e)[:100]}"}
+
 DEFAULT_ADMIN_EMAIL = "admin@seolhaeone.kr"
 DEFAULT_ADMIN_PASSWORD = "seolhae1234"
 EMERGENCY_ADMIN_SUB = "emergency-admin"
