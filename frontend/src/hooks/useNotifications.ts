@@ -13,7 +13,7 @@ export type PendingNotification = {
  * 주기적으로 pending 알림 수를 폴링하여 헤더 뱃지에 반영.
  * 기본 15초 간격, 탭이 비활성일 때는 멈춤.
  */
-export function useNotificationCount(intervalMs = 15000) {
+export function useNotificationCount(intervalMs = 20000) {
   const [count, setCount] = useState(0);
   const [lastCount, setLastCount] = useState(0);
   const [pulse, setPulse] = useState(false);

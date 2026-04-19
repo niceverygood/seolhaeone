@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Sparkles, ArrowRight, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAiQuery } from "@/hooks/useAi";
 
 const suggestions = [
@@ -10,6 +11,7 @@ const suggestions = [
 ];
 
 export function AiQueryBar() {
+  const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [result, setResult] = useState<{
     answer: string;
@@ -89,23 +91,45 @@ export function AiQueryBar() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border-light bg-surface-light">
-                    {Object.keys(result.data[0]).map((key) => (
-                      <th key={key} className="px-3 py-2 text-left font-medium text-text-muted">
-                        {key}
-                      </th>
-                    ))}
+                    {Object.keys(result.data[0])
+                      .filter((k) => k !== "id")
+                      .map((key) => (
+                        <th key={key} className="px-3 py-2 text-left font-medium text-text-muted">
+                          {key}
+                        </th>
+                      ))}
+                    {/* id 컬럼이 있으면 프로필 이동 버튼 열 추가 */}
+                    {"id" in result.data[0] && (
+                      <th className="px-3 py-2 text-right font-medium text-text-muted"></th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {result.data.map((row, i) => (
-                    <tr key={i} className="border-b border-border-light/60 last:border-0">
-                      {Object.values(row).map((val, j) => (
-                        <td key={j} className="px-3 py-2 text-text-dark">
-                          {typeof val === "number" ? val.toLocaleString() : String(val ?? "-")}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                  {result.data.map((row, i) => {
+                    const id = typeof row.id === "string" ? row.id : null;
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-border-light/60 last:border-0 ${
+                          id ? "cursor-pointer transition-colors hover:bg-gold-bg/30" : ""
+                        }`}
+                        onClick={id ? () => navigate(`/customers/${id}`) : undefined}
+                      >
+                        {Object.entries(row)
+                          .filter(([k]) => k !== "id")
+                          .map(([, val], j) => (
+                            <td key={j} className="px-3 py-2 text-text-dark">
+                              {typeof val === "number" ? val.toLocaleString() : String(val ?? "-")}
+                            </td>
+                          ))}
+                        {id && (
+                          <td className="px-3 py-2 text-right">
+                            <span className="text-xs font-medium text-gold-dark">프로필 →</span>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

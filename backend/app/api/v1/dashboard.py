@@ -22,29 +22,31 @@ def get_kpi(
     else:
         start = today - timedelta(days=7)
 
-    stats = db.query(DailyStat).filter(DailyStat.stat_date >= start, DailyStat.stat_date <= today).all()
-
-    total_revenue = sum(int(s.total_revenue or 0) for s in stats)
-    total_rounds = sum(int(s.golf_rounds or 0) for s in stats)
-    avg_occupancy = (
-        sum(float(s.room_occupancy_rate or 0) for s in stats) / len(stats)
-        if stats else 0
-    )
-
-    # Previous period for delta calculation
     days_count = (today - start).days + 1
     prev_start = start - timedelta(days=days_count)
     prev_end = start - timedelta(days=1)
-    prev_stats = db.query(DailyStat).filter(
-        DailyStat.stat_date >= prev_start, DailyStat.stat_date <= prev_end
-    ).all()
 
-    prev_revenue = sum(int(s.total_revenue or 0) for s in prev_stats)
-    prev_rounds = sum(int(s.golf_rounds or 0) for s in prev_stats)
-    prev_occupancy = (
-        sum(float(s.room_occupancy_rate or 0) for s in prev_stats) / len(prev_stats)
-        if prev_stats else 0
-    )
+    # 현재 + 이전 기간 집계를 한 번의 쿼리로 처리 (네트워크 왕복 절반)
+    rev_col = func.coalesce(func.sum(DailyStat.total_revenue), 0)
+    rounds_col = func.coalesce(func.sum(DailyStat.golf_rounds), 0)
+    occ_col = func.coalesce(func.avg(DailyStat.room_occupancy_rate), 0)
+    cnt_col = func.count(DailyStat.id)
+
+    cur_row = db.query(rev_col, rounds_col, occ_col, cnt_col).filter(
+        DailyStat.stat_date >= start, DailyStat.stat_date <= today,
+    ).one()
+    prev_row = db.query(rev_col, rounds_col, occ_col, cnt_col).filter(
+        DailyStat.stat_date >= prev_start, DailyStat.stat_date <= prev_end,
+    ).one()
+
+    total_revenue = int(cur_row[0] or 0)
+    total_rounds = int(cur_row[1] or 0)
+    avg_occupancy = float(cur_row[2] or 0)
+    days = int(cur_row[3] or 0)
+
+    prev_revenue = int(prev_row[0] or 0)
+    prev_rounds = int(prev_row[1] or 0)
+    prev_occupancy = float(prev_row[2] or 0)
 
     def delta(cur: float, prev: float) -> float:
         if prev == 0:
@@ -59,7 +61,7 @@ def get_kpi(
         "rounds_delta": delta(total_rounds, prev_rounds),
         "occupancy_delta": round((avg_occupancy - prev_occupancy) * 100, 1),
         "period": period,
-        "days": len(stats),
+        "days": days,
     }
 
 
