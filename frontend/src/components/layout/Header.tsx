@@ -1,4 +1,8 @@
+import { useState } from "react";
 import { Bell, Search } from "lucide-react";
+import { useNotificationCount } from "@/hooks/useNotifications";
+import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
+import { cn } from "@/lib/cn";
 
 type Props = {
   title: string;
@@ -6,6 +10,9 @@ type Props = {
 };
 
 export function Header({ title, subtitle }: Props) {
+  const [open, setOpen] = useState(false);
+  const { count, pulse, refresh } = useNotificationCount();
+
   return (
     <header className="flex h-20 items-center justify-between gap-4 border-b border-border-light bg-surface-white px-6 lg:px-10">
       <div className="min-w-0 flex-1">
@@ -29,13 +36,31 @@ export function Header({ title, subtitle }: Props) {
 
         <button
           type="button"
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border-light bg-surface-white text-text-dark transition-colors hover:bg-surface-light"
-          aria-label="알림"
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors",
+            count > 0
+              ? "border-gold bg-gold/10 text-gold-dark hover:bg-gold/20"
+              : "border-border-light bg-surface-white text-text-dark hover:bg-surface-light",
+            pulse && "animate-pulse",
+          )}
+          aria-label={`알림 ${count}건`}
         >
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-gold" />
+          <Bell className={cn("h-4 w-4", pulse && "animate-bounce")} />
+          {count > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[color:var(--color-danger)] px-1 text-[10px] font-bold text-white">
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
         </button>
       </div>
+
+      {open && (
+        <NotificationsPanel
+          onClose={() => setOpen(false)}
+          onChanged={() => void refresh()}
+        />
+      )}
     </header>
   );
 }

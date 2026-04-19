@@ -15,7 +15,11 @@ const gradeBadge: Record<string, string> = {
 };
 
 export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
-  const isBooked = slot.status === "reserved" || slot.status === "completed";
+  const isBooked =
+    slot.status === "reserved" ||
+    slot.status === "completed" ||
+    slot.status === "pending";
+  const isPendingConfirm = slot.status === "pending";
   const isHighRisk = slot.noshow_score > 0.3;
   const isVip = slot.customer_grade === "diamond" || slot.customer_grade === "gold";
 
@@ -48,7 +52,12 @@ export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
         <span className={cn("text-sm font-medium", isVip ? "text-text-dark" : "text-text-primary")}>
           {slot.customer_name ?? "미지정"}
         </span>
-        {slot.customer_grade && (
+        {isPendingConfirm && (
+          <span className="rounded bg-[color:var(--color-danger)]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[color:var(--color-danger)]">
+            확정대기
+          </span>
+        )}
+        {slot.customer_grade && !isPendingConfirm && (
           <span
             className={cn(
               "ml-auto rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",

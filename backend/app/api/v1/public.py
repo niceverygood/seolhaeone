@@ -185,7 +185,8 @@ class GolfReservationRequest(BaseModel):
 
 @router.post("/reserve/golf", status_code=201)
 def reserve_golf(body: GolfReservationRequest, db: Session = Depends(get_db)):
-    """고객 골프 예약"""
+    """고객 골프 예약 — 관리자 확정 대기(status='pending')로 저장."""
+    from app.models.analytics import AiActionLog
     # Find or create customer by phone
     cust = db.query(Customer).filter(Customer.phone == body.phone).first()
     if not cust:
@@ -208,9 +209,29 @@ def reserve_golf(body: GolfReservationRequest, db: Session = Depends(get_db)):
     tt.customer_id = cust.id
     tt.party_size = body.party_size
     tt.notes = body.notes
-    tt.status = "reserved"
+    tt.status = "pending"  # 관리자 확정 전
     from datetime import datetime, timezone, timedelta
     tt.booked_at = datetime.now(timezone(timedelta(hours=9)))
+
+    # 관리자 알림용 로그 생성
+    course = db.query(GolfCourse).filter(GolfCourse.id == tt.course_id).first()
+    db.add(AiActionLog(
+        action_type="pending_reservation",
+        target_customer_id=cust.id,
+        payload={
+            "kind": "golf",
+            "teetime_id": str(tt.id),
+            "tee_date": str(tt.tee_date),
+            "tee_time": tt.tee_time.strftime("%H:%M"),
+            "course_name": course.name if course else None,
+            "party_size": body.party_size,
+            "customer_name": cust.name,
+            "customer_phone": cust.phone,
+            "notes": body.notes,
+        },
+        status="pending",
+        created_by="customer",
+    ))
 
     db.commit()
     db.refresh(tt)
@@ -220,6 +241,7 @@ def reserve_golf(body: GolfReservationRequest, db: Session = Depends(get_db)):
         "tee_date": str(tt.tee_date),
         "tee_time": tt.tee_time.strftime("%H:%M"),
         "party_size": tt.party_size,
+        "status": "pending",
     }
 
 
@@ -259,7 +281,7 @@ def reserve_room(body: RoomReservationRequest, db: Session = Depends(get_db)):
     from sqlalchemy import and_, or_
     conflict = db.query(RoomReservation).filter(
         RoomReservation.room_id == room.id,
-        RoomReservation.status.in_(["confirmed", "checked_in"]),
+        RoomReservation.status.in_(["pending", "confirmed", "checked_in"]),
         or_(
             and_(RoomReservation.check_in <= body.check_in, RoomReservation.check_out > body.check_in),
             and_(RoomReservation.check_in < body.check_out, RoomReservation.check_out >= body.check_out),
@@ -278,11 +300,37 @@ def reserve_room(body: RoomReservationRequest, db: Session = Depends(get_db)):
         customer_id=cust.id,
         check_in=body.check_in,
         check_out=body.check_out,
-        status="confirmed",
+        status="pending",  # 관리자 확정 전
         total_price=total,
         special_requests=body.special_requests,
     )
     db.add(res)
+    db.flush()
+
+    # 관리자 알림용 로그 생성
+    from app.models.analytics import AiActionLog
+    db.add(AiActionLog(
+        action_type="pending_reservation",
+        target_customer_id=cust.id,
+        payload={
+            "kind": "room",
+            "reservation_id": str(res.id),
+            "room_id": str(room.id),
+            "building": room.building,
+            "room_type": room.room_type,
+            "room_number": room.room_number,
+            "check_in": str(body.check_in),
+            "check_out": str(body.check_out),
+            "nights": nights,
+            "total_price": total,
+            "guest_count": body.guest_count,
+            "customer_name": cust.name,
+            "customer_phone": cust.phone,
+            "special_requests": body.special_requests,
+        },
+        status="pending",
+        created_by="customer",
+    ))
     db.commit()
     db.refresh(res)
     return {

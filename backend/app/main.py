@@ -91,7 +91,7 @@ _IMPORT_ERROR: str | None = None
 try:
     from sqlalchemy import inspect, text
 
-    from app.api.v1 import ai, auth, customers, dashboard, golf, public, resort
+    from app.api.v1 import ai, auth, customers, dashboard, golf, notifications, public, resort
     from app.core.database import (
         ENGINE_INIT_ERROR,
         Base,
@@ -102,7 +102,7 @@ try:
     from app.models.staff import Staff
 
     # Mount routers (DB import 성공 시에만)
-    for r in (auth.router, dashboard.router, golf.router, resort.router, customers.router, ai.router, public.router):
+    for r in (auth.router, dashboard.router, golf.router, resort.router, customers.router, ai.router, public.router, notifications.router):
         app.include_router(r, prefix=settings.API_V1_PREFIX)
 
 except Exception as e:
