@@ -8,6 +8,7 @@ import { useRooms, useReservations } from "@/hooks/useResort";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RoomDetailModal } from "@/components/resort/RoomDetailModal";
 import { api } from "@/lib/api";
 import type { ReservationResponse, RoomResponse } from "@/lib/types";
 
@@ -41,6 +42,7 @@ export default function Resort() {
 
   const { data: rooms, loading: roomsLoading, error: roomsError, refetch: refetchRooms } = useRooms(activeBuilding);
   const { data: reservations, loading: resLoading, refetch: refetchRes } = useReservations(dateStr);
+  const [detailRoomId, setDetailRoomId] = useState<string | null>(null);
 
   const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; });
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; });
@@ -143,10 +145,22 @@ export default function Resort() {
                 reservation={res}
                 onCheckin={handleCheckin}
                 onCheckout={handleCheckout}
+                onOpenDetail={() => setDetailRoomId(room.id)}
               />
             );
           })}
         </div>
+      )}
+
+      {detailRoomId && (
+        <RoomDetailModal
+          roomId={detailRoomId}
+          onClose={() => setDetailRoomId(null)}
+          onChanged={() => {
+            refetchRes();
+            refetchRooms();
+          }}
+        />
       )}
 
       {/* Today's reservations table */}
@@ -203,18 +217,24 @@ function RoomCard({
   reservation,
   onCheckin,
   onCheckout,
+  onOpenDetail,
 }: {
   room: RoomResponse;
   reservation?: ReservationResponse;
   onCheckin: (id: string) => void;
   onCheckout: (id: string) => void;
+  onOpenDetail: () => void;
 }) {
   const isOccupied = !!reservation;
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(e) => { if (e.key === "Enter") onOpenDetail(); }}
       className={cn(
-        "rounded-xl border p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md",
+        "cursor-pointer rounded-xl border p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md hover:border-gold/50",
         isOccupied
           ? "border-gold/40 bg-gold-bg/30"
           : "border-border-light bg-surface-white",
@@ -252,7 +272,7 @@ function RoomCard({
           <div className="flex gap-1">
             {reservation.status === "confirmed" && (
               <button
-                onClick={() => onCheckin(reservation.id)}
+                onClick={(e) => { e.stopPropagation(); onCheckin(reservation.id); }}
                 className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md bg-gold text-xs font-medium text-text-on-gold hover:bg-gold-dark"
               >
                 <LogIn className="h-3 w-3" /> 체크인
@@ -260,7 +280,7 @@ function RoomCard({
             )}
             {reservation.status === "checked_in" && (
               <button
-                onClick={() => onCheckout(reservation.id)}
+                onClick={(e) => { e.stopPropagation(); onCheckout(reservation.id); }}
                 className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-border-light bg-surface-white text-xs font-medium text-text-dark hover:bg-surface-light"
               >
                 <LogOut className="h-3 w-3" /> 체크아웃
