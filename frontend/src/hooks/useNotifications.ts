@@ -4,7 +4,7 @@ import { api, ApiError } from "@/lib/api";
 export type PendingNotification = {
   id: string;
   created_at: string | null;
-  kind: "golf" | "room";
+  kind: "golf" | "room" | "package";
   customer_id: string | null;
   payload: Record<string, unknown>;
 };

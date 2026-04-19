@@ -11,9 +11,11 @@ import { api, ApiError } from "@/lib/api";
 import {
   usePublicCourses,
   usePublicRooms,
+  usePublicPackages,
   useAvailableSlots,
   type PublicCourse,
   type PublicRoom,
+  type PublicPackage,
   type AvailableSlot,
 } from "@/hooks/usePublic";
 
@@ -29,6 +31,7 @@ export default function Reserve() {
   const [selectedCourse, setSelectedCourse] = useState<PublicCourse | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<PublicRoom | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<PublicPackage | null>(null);
   const [partySize, setPartySize] = useState(2);
   const [guestCount, setGuestCount] = useState(2);
   const [name, setName] = useState("");
@@ -45,6 +48,7 @@ export default function Reserve() {
     setSelectedCourse(null);
     setSelectedSlot(null);
     setSelectedRoom(null);
+    setSelectedPackage(null);
     setCheckIn("");
     setCheckOut("");
     setPartySize(2);
@@ -91,6 +95,22 @@ export default function Reserve() {
           id: res.id,
           summary: `${selectedRoom.building} ${selectedRoom.room_type} · ${res.nights}박 · ₩${res.total_price.toLocaleString()}`,
         });
+      } else if (service === "package" && selectedPackage) {
+        const res = await api.post<{ id: string; name: string; base_price: number }>(
+          "/public/reserve/package",
+          {
+            name, phone, email: email || null,
+            package_id: selectedPackage.id,
+            check_in: checkIn || null,
+            check_out: checkOut || null,
+            guest_count: guestCount,
+            notes: notes || null,
+          },
+        );
+        setResult({
+          id: res.id,
+          summary: `${selectedPackage.name} · ₩${res.base_price.toLocaleString()}`,
+        });
       }
       setStep(5);
     } catch (err) {
@@ -108,7 +128,8 @@ export default function Reserve() {
     }
     if (step === 3) {
       if (service === "golf") return !!selectedSlot;
-      return !!selectedRoom;
+      if (service === "room") return !!selectedRoom;
+      return !!selectedPackage;
     }
     if (step === 4) return !!name && !!phone;
     return false;
@@ -193,6 +214,14 @@ export default function Reserve() {
             guestCount={guestCount} setGuestCount={setGuestCount}
           />
         )}
+        {step === 3 && service === "package" && (
+          <Step3Package
+            selectedPackage={selectedPackage}
+            setSelectedPackage={setSelectedPackage}
+            guestCount={guestCount}
+            setGuestCount={setGuestCount}
+          />
+        )}
 
         {/* Step 4: Customer info */}
         {step === 4 && (
@@ -205,6 +234,7 @@ export default function Reserve() {
             course={selectedCourse}
             slot={selectedSlot}
             room={selectedRoom}
+            pkg={selectedPackage}
             checkIn={checkIn}
             checkOut={checkOut}
             partySize={partySize}
@@ -551,11 +581,122 @@ function Step3Room({
   );
 }
 
+// ─── Step 3: Package ───
+
+function Step3Package({
+  selectedPackage, setSelectedPackage, guestCount, setGuestCount,
+}: {
+  selectedPackage: PublicPackage | null;
+  setSelectedPackage: (p: PublicPackage) => void;
+  guestCount: number;
+  setGuestCount: (n: number) => void;
+}) {
+  const { data: packages, loading, error } = usePublicPackages();
+
+  if (loading) return <Spinner />;
+
+  if (error) {
+    return (
+      <div className="rounded-lg bg-[color:var(--color-danger)]/10 px-4 py-3 text-sm text-[color:var(--color-danger)]">
+        패키지 정보를 불러오지 못했습니다: {error}
+      </div>
+    );
+  }
+
+  const list = packages ?? [];
+  if (list.length === 0) {
+    return (
+      <p className="rounded-2xl border border-border-light bg-surface-white py-12 text-center text-sm text-text-muted">
+        현재 활성 패키지가 없습니다. 다른 상품을 선택해 주세요.
+      </p>
+    );
+  }
+
+  const segmentLabel: Record<string, string> = {
+    diamond: "다이아몬드 전용",
+    gold: "골드 전용",
+    silver: "실버 전용",
+    member: "일반 회원",
+    corporate: "기업 고객",
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="font-display text-xl text-text-dark">패키지 선택</h2>
+
+      <div className="space-y-3">
+        {list.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setSelectedPackage(p)}
+            className={cn(
+              "w-full rounded-2xl border p-5 text-left transition-all",
+              selectedPackage?.id === p.id
+                ? "border-gold bg-gold-bg/30 shadow-md"
+                : "border-border-light bg-surface-white hover:border-gold/40",
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold-bg">
+                  <PackageIcon className="h-5 w-5 text-gold-dark" />
+                </div>
+                <div>
+                  <div className="font-display text-base text-text-dark">{p.name}</div>
+                  {p.description && (
+                    <p className="mt-0.5 text-xs leading-relaxed text-text-muted">
+                      {p.description}
+                    </p>
+                  )}
+                  {p.target_segment && (
+                    <span className="mt-1.5 inline-block rounded bg-gold/15 px-2 py-0.5 text-[10px] font-semibold text-gold-dark">
+                      {segmentLabel[p.target_segment] ?? p.target_segment}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-sm font-semibold text-gold-dark">
+                  ₩{p.base_price.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {selectedPackage && (
+        <div className="rounded-2xl border border-border-light bg-surface-white p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-text-dark">
+            <Users className="h-4 w-4 text-gold" /> 인원
+          </h3>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setGuestCount(n)}
+                className={cn(
+                  "h-12 flex-1 rounded-lg border font-semibold transition-all",
+                  guestCount === n
+                    ? "border-gold bg-gold text-text-on-gold"
+                    : "border-border-light bg-surface-light text-text-dark hover:border-gold",
+                )}
+              >
+                {n}명
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Step 4: Info ───
 
 function Step4Info({
   name, setName, phone, setPhone, email, setEmail, notes, setNotes,
-  service, course, slot, room, checkIn, checkOut, partySize, guestCount, error,
+  service, course, slot, room, pkg, checkIn, checkOut, partySize, guestCount, error,
 }: {
   name: string; setName: (v: string) => void;
   phone: string; setPhone: (v: string) => void;
@@ -565,6 +706,7 @@ function Step4Info({
   course: PublicCourse | null;
   slot: AvailableSlot | null;
   room: PublicRoom | null;
+  pkg: PublicPackage | null;
   checkIn: string;
   checkOut: string;
   partySize: number;
@@ -595,6 +737,19 @@ function Step4Info({
             <div className="text-text-muted">{checkIn} → {checkOut} · {guestCount}명</div>
             <div className="mt-2 font-mono text-base font-semibold">
               총 ₩{(room.base_price * Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)))).toLocaleString()}
+            </div>
+          </div>
+        )}
+        {service === "package" && pkg && (
+          <div className="space-y-1 text-sm text-text-dark">
+            <div>{pkg.name}</div>
+            {checkIn && (
+              <div className="text-text-muted">
+                {checkIn}{checkOut ? ` → ${checkOut}` : ""} · {guestCount}명
+              </div>
+            )}
+            <div className="mt-2 font-mono text-base font-semibold">
+              총 ₩{pkg.base_price.toLocaleString()}
             </div>
           </div>
         )}

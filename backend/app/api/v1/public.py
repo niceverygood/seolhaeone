@@ -351,3 +351,65 @@ def reserve_room(body: RoomReservationRequest, db: Session = Depends(get_db)):
         "total_price": int(res.total_price),
         "nights": nights,
     }
+
+
+class PackageReservationRequest(BaseModel):
+    name: str
+    phone: str
+    email: str | None = None
+    package_id: str
+    check_in: date | None = None
+    check_out: date | None = None
+    guest_count: int = Field(ge=1, le=8)
+    notes: str | None = None
+
+
+@router.post("/reserve/package", status_code=201)
+def reserve_package(body: PackageReservationRequest, db: Session = Depends(get_db)):
+    """패키지 예약 — 번들 상품은 관리자 확정이 필요하므로 알림만 등록.
+    추후 관리자가 확정하면서 실제 객실/티타임 예약을 배정한다."""
+    from app.models.analytics import AiActionLog
+
+    pkg = db.query(Package).filter(Package.id == UUID(body.package_id)).first()
+    if not pkg or not pkg.is_active:
+        raise HTTPException(404, "패키지를 찾을 수 없습니다.")
+
+    # Find or create customer
+    cust = db.query(Customer).filter(Customer.phone == body.phone).first()
+    if not cust:
+        cust = Customer(
+            name=body.name, phone=body.phone, email=body.email, grade="member",
+        )
+        db.add(cust)
+        db.flush()
+
+    # 관리자 알림 — 확정 시 세부 배정
+    log = AiActionLog(
+        action_type="pending_reservation",
+        target_customer_id=cust.id,
+        payload={
+            "kind": "package",
+            "package_id": str(pkg.id),
+            "package_name": pkg.name,
+            "base_price": int(pkg.base_price or 0),
+            "check_in": str(body.check_in) if body.check_in else None,
+            "check_out": str(body.check_out) if body.check_out else None,
+            "guest_count": body.guest_count,
+            "customer_name": cust.name,
+            "customer_phone": cust.phone,
+            "notes": body.notes,
+        },
+        status="pending",
+        created_by="customer",
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    return {
+        "id": str(log.id),
+        "customer_id": str(cust.id),
+        "name": pkg.name,
+        "base_price": int(pkg.base_price or 0),
+        "status": "pending",
+    }

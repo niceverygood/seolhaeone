@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flag, BedDouble, Check, X, Loader2, Inbox } from "lucide-react";
+import { Flag, BedDouble, Check, X, Loader2, Inbox, Package } from "lucide-react";
 import {
   confirmNotification,
   listPendingNotifications,
@@ -110,15 +110,19 @@ function NotificationItem({
   onAction: (id: string, action: "confirm" | "reject") => void;
 }) {
   const p = n.payload as Record<string, string | number | undefined>;
-  const Icon = n.kind === "golf" ? Flag : BedDouble;
+  const Icon = n.kind === "golf" ? Flag : n.kind === "room" ? BedDouble : Package;
   const title =
     n.kind === "golf"
       ? `골프 · ${p.course_name ?? ""} ${p.tee_date ?? ""} ${p.tee_time ?? ""}`
-      : `객실 · ${p.building ?? ""} ${p.room_type ?? ""}`;
+      : n.kind === "room"
+      ? `객실 · ${p.building ?? ""} ${p.room_type ?? ""}`
+      : `패키지 · ${p.package_name ?? ""}`;
   const detail =
     n.kind === "golf"
       ? `${p.customer_name} (${p.customer_phone}) · ${p.party_size}인`
-      : `${p.customer_name} (${p.customer_phone}) · ${p.check_in} ~ ${p.check_out} · ${p.nights}박 · ₩${Number(p.total_price ?? 0).toLocaleString()}`;
+      : n.kind === "room"
+      ? `${p.customer_name} (${p.customer_phone}) · ${p.check_in} ~ ${p.check_out} · ${p.nights}박 · ₩${Number(p.total_price ?? 0).toLocaleString()}`
+      : `${p.customer_name} (${p.customer_phone})${p.check_in ? ` · ${p.check_in}${p.check_out ? ` ~ ${p.check_out}` : ""}` : ""} · ${p.guest_count}인 · ₩${Number(p.base_price ?? 0).toLocaleString()}`;
 
   return (
     <li className="p-4">

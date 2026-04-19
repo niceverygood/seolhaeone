@@ -93,6 +93,7 @@ def confirm_notification(
             res = db.query(RoomReservation).filter(RoomReservation.id == UUID(res_id)).first()
             if res:
                 res.status = "confirmed"
+    # kind == "package": 번들이라 관리자가 후속 배정. 확정만 기록.
 
     log.status = "approved"
     log.result = {"confirmed_at": now}
