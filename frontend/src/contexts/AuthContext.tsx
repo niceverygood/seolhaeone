@@ -44,6 +44,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, [token, logout]);
 
+  // ── Heartbeat: Vercel 함수가 idle로 잠들지 않도록 활성 세션일 때 4분마다 ping.
+  // 탭이 hidden이면 정지 (배터리/트래픽 절약), 복귀 시 즉시 1회 ping 후 재개.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const ping = () => {
+      if (document.visibilityState === "visible" && !cancelled) {
+        void api.get("/auth/warmup").catch(() => {});
+      }
+    };
+    ping();
+    const timer = window.setInterval(ping, 4 * 60 * 1000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") ping();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [user]);
+
   const login = useCallback(async (email: string, password: string) => {
     const { access_token } = await api.post<Token>("/auth/login", { email, password });
     localStorage.setItem("token", access_token);
