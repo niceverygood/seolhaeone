@@ -6,11 +6,27 @@ import { api } from "@/lib/api";
  * - 30초 이내 재방문은 캐시 즉시 반환 (loading=false)
  * - 30초~5분은 stale 데이터 표시 + 백그라운드 revalidate
  * - 같은 path+params로 동시에 여러 훅이 호출되면 단일 요청으로 합쳐 결과 공유
+ * - 파라미터 순서/undefined 값에 상관없이 동일 키로 정규화 (prefetch 호환성)
  */
 const cache = new Map<string, { data: unknown; ts: number }>();
 const inflight = new Map<string, Promise<unknown>>();
 const FRESH_TTL = 30_000;
 const HARD_TTL = 5 * 60_000;
+
+function normalizeKey(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined | null>,
+): string {
+  if (!params) return path + "{}";
+  // null/undefined 제거 후 키 정렬 → 순서가 달라도 동일 키
+  const sorted: Record<string, string | number | boolean> = {};
+  for (const k of Object.keys(params).sort()) {
+    const v = params[k];
+    if (v === undefined || v === null) continue;
+    sorted[k] = v;
+  }
+  return path + JSON.stringify(sorted);
+}
 
 function sharedGet<T>(
   key: string,
@@ -36,7 +52,7 @@ export function useFetch<T>(
   path: string,
   params?: Record<string, string | number | boolean | undefined | null>,
 ) {
-  const key = path + JSON.stringify(params ?? {});
+  const key = normalizeKey(path, params);
 
   const cached = cache.get(key);
   const now = Date.now();
@@ -91,7 +107,7 @@ export function prefetch(
   path: string,
   params?: Record<string, string | number | boolean | undefined | null>,
 ) {
-  const key = path + JSON.stringify(params ?? {});
+  const key = normalizeKey(path, params);
   const cached = cache.get(key);
   if (cached && Date.now() - cached.ts < FRESH_TTL) return Promise.resolve();
   return sharedGet(key, path, params).catch(() => {});

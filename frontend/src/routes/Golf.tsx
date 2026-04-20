@@ -28,7 +28,7 @@ function toDateStr(d: Date) {
 
 export default function Golf() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const { data: courses, loading: coursesLoading, error: coursesError, refetch } = useCourses();
+  const { data: courses, error: coursesError, refetch } = useCourses();
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
 
   const courseId = activeCourseId ?? courses?.[0]?.id ?? "";
@@ -55,8 +55,7 @@ export default function Golf() {
   const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; });
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; });
 
-  if (coursesLoading) return <Spinner />;
-  if (coursesError) return <ErrorAlert message={coursesError} onRetry={refetch} />;
+  if (coursesError && !courses) return <ErrorAlert message={coursesError} onRetry={refetch} />;
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-6">

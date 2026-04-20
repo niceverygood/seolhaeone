@@ -1,10 +1,9 @@
 import { useState, useCallback } from "react";
-import { Search, Filter, ArrowUpDown } from "lucide-react";
+import { Search, Filter, ArrowUpDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useCustomers } from "@/hooks/useCustomers";
 import { GradeBadge } from "@/components/customers/GradeBadge";
 import { ChurnGauge } from "@/components/customers/ChurnGauge";
-import { Spinner } from "@/components/ui/Spinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useNavigate } from "react-router-dom";
@@ -76,15 +75,18 @@ export default function Customers() {
           ))}
         </div>
 
-        <span className="text-sm text-text-muted">{data?.total ?? 0}명</span>
+        <span className="flex items-center gap-2 text-sm text-text-muted">
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />}
+          {data ? `${data.total}명` : loading ? "불러오는 중..." : "0명"}
+        </span>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <Spinner />
-      ) : error ? (
+      {/* Table — 데이터가 이미 있으면 로딩 중에도 그대로 유지 (SWR) */}
+      {error && !data ? (
         <ErrorAlert message={error} onRetry={refetch} />
-      ) : !data?.items.length ? (
+      ) : !data ? (
+        <TableSkeleton />
+      ) : data.items.length === 0 ? (
         <EmptyState message="조건에 맞는 고객이 없습니다." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border-light bg-surface-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
@@ -144,6 +146,22 @@ export default function Customers() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border-light bg-surface-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="divide-y divide-border-light/60">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3">
+            <div className="h-6 w-28 animate-pulse rounded bg-surface-light" />
+            <div className="h-6 w-16 animate-pulse rounded bg-surface-light" />
+            <div className="ml-auto h-4 w-24 animate-pulse rounded bg-surface-light" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
