@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -802,4 +802,343 @@ def respond_to_action(body: ActionRespondRequest, db: Session = Depends(get_db))
     db.commit()
     db.refresh(new_log)
     return {"ok": True, "action_id": str(new_log.id), "mode": "created"}
+
+
+# ─── Feature 1: 고객 프로필 AI 요약 ──────────────────────────────────
+
+def _gather_customer_context(customer_id: str, db: Session) -> dict | None:
+    """단일 고객의 전체 컨텍스트 — 프로필 요약·메시지 초안에서 공통 사용."""
+    from uuid import UUID as _UID
+    try:
+        cid = _UID(customer_id)
+    except (ValueError, TypeError):
+        return None
+    c = db.query(Customer).filter(Customer.id == cid).first()
+    if not c:
+        return None
+
+    today = date.today()
+    # 최근 골프 예약 5건
+    golf_recent = (
+        db.query(GolfTeetime, GolfCourse)
+        .outerjoin(GolfCourse, GolfTeetime.course_id == GolfCourse.id)
+        .filter(GolfTeetime.customer_id == c.id)
+        .order_by(GolfTeetime.tee_date.desc())
+        .limit(5)
+        .all()
+    )
+    # 최근 객실 예약 5건
+    from app.models.resort import Room
+    room_recent = (
+        db.query(RoomReservation, Room)
+        .outerjoin(Room, RoomReservation.room_id == Room.id)
+        .filter(RoomReservation.customer_id == c.id)
+        .order_by(RoomReservation.check_in.desc())
+        .limit(5)
+        .all()
+    )
+
+    days_since_visit = (
+        (today - c.last_visit_at.date()).days if c.last_visit_at else None
+    )
+
+    return {
+        "customer": {
+            "id": str(c.id),
+            "name": c.name,
+            "phone": c.phone,
+            "email": c.email,
+            "grade": c.grade,
+            "clv": int(c.clv or 0),
+            "churn_risk": float(c.churn_risk or 0),
+            "total_visits": c.total_visits,
+            "days_since_visit": days_since_visit,
+            "last_visit": c.last_visit_at.isoformat() if c.last_visit_at else None,
+            "ai_tags": c.ai_tags or [],
+            "ai_memos": c.ai_memo or [],
+            "preferences": c.preferences or {},
+        },
+        "recent_golf": [
+            {
+                "date": str(t.tee_date),
+                "course": course.name if course else None,
+                "time": t.tee_time.strftime("%H:%M"),
+                "status": t.status,
+                "party_size": t.party_size,
+            }
+            for t, course in golf_recent
+        ],
+        "recent_rooms": [
+            {
+                "check_in": str(r.check_in),
+                "check_out": str(r.check_out),
+                "building": room.building if room else None,
+                "room_type": room.room_type if room else None,
+                "status": r.status,
+                "total_price": int(r.total_price or 0),
+            }
+            for r, room in room_recent
+        ],
+    }
+
+
+_SUMMARY_PROMPT = """당신은 리조트 CRM의 고객 전략가입니다.
+아래 JSON은 한 고객의 프로필 + 최근 이용 이력입니다.
+관리자가 2~3초 만에 이 고객을 파악하도록 **3줄 이내** 요약을 작성하세요.
+
+포맷 (각 줄은 세미콜론이나 · 로 구분된 키워드 1~3개):
+1) 핵심 프로필: 등급, 선호 코스/객실, 특이 태그
+2) 최근 행동 및 위험 신호: 마지막 방문, 이탈위험, 주목할 패턴
+3) 추천 액션 1개: 구체적 제안 (예: "금요일 저녁 풀스위트 할인 초대")
+
+원칙: 과장 금지, 데이터에 없는 건 쓰지 말 것, 금액은 ₩1,234,567 형식."""
+
+
+_SUMMARY_CACHE: dict = {}
+_SUMMARY_TTL = 300.0  # 5분
+
+
+@router.get("/customer-summary/{customer_id}")
+def customer_ai_summary(customer_id: str, db: Session = Depends(get_db)):
+    """고객 프로필 AI 요약 — 3줄."""
+    # 캐시
+    cached = _SUMMARY_CACHE.get(customer_id)
+    if cached and _time.time() - cached["ts"] < _SUMMARY_TTL:
+        return cached["data"]
+
+    ctx = _gather_customer_context(customer_id, db)
+    if ctx is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Customer not found")
+
+    summary = None
+    if llm_available():
+        try:
+            summary = llm_chat(
+                _SUMMARY_PROMPT,
+                f"[고객 프로필 JSON]\n{json.dumps(ctx, ensure_ascii=False, default=str)}",
+                max_tokens=250,
+                temperature=0.4,
+            )
+        except Exception as e:
+            log.warning("customer summary LLM failed: %s", e)
+
+    if summary is None:
+        # LLM 없으면 간단한 템플릿
+        c = ctx["customer"]
+        pref = c.get("preferences", {}).get("preferred_course") or "-"
+        churn_pct = int(c["churn_risk"] * 100)
+        tags = ", ".join((c.get("ai_tags") or [])[:3])
+        last = c.get("days_since_visit")
+        last_txt = f"{last}일 전 방문" if last is not None else "방문 이력 없음"
+        summary = (
+            f"{c['grade'].upper()} · {pref}코스 선호 · {tags}\n"
+            f"{last_txt} · 이탈위험 {churn_pct}% · CLV ₩{c['clv']:,}\n"
+            f"추천: " + (
+                "맞춤 리텐션 캠페인 실행" if c["churn_risk"] >= 0.5
+                else "상위 패키지 업셀 제안" if c["total_visits"] >= 5
+                else "다음 방문 시 선호 확인"
+            )
+        )
+
+    result = {
+        "summary": summary,
+        "context": {
+            "grade": ctx["customer"]["grade"],
+            "clv": ctx["customer"]["clv"],
+            "churn_risk": ctx["customer"]["churn_risk"],
+            "total_visits": ctx["customer"]["total_visits"],
+            "days_since_visit": ctx["customer"]["days_since_visit"],
+            "tag_count": len(ctx["customer"]["ai_tags"]),
+        },
+        "model": "openrouter" if llm_available() else "template",
+    }
+    _SUMMARY_CACHE[customer_id] = {"data": result, "ts": _time.time()}
+    return result
+
+
+# ─── Feature 2: 1:1 맞춤 메시지 초안 ─────────────────────────────────
+
+_MESSAGE_PROMPT = """당신은 고급 리조트의 고객 커뮤니케이션 담당자입니다.
+주어진 고객 정보를 바탕으로 복붙해서 바로 카카오톡·SMS로 보낼 수 있는
+한국어 메시지 **3가지 톤**을 작성하세요:
+
+1. formal   : 정중·격식 (VIP·고연령 적합)
+2. friendly : 따뜻하고 편안 (단골·중년)
+3. promotion: 프로모션·혜택 강조 (복귀 유도·업셀)
+
+각 메시지는 80~140자. 이모지는 formal에는 쓰지 않고 friendly·promotion은 1~2개 허용.
+고객 이름을 반드시 사용하고, 최근 방문 코스/객실 같은 개인화 요소를 1개 이상 포함.
+할인율·가격은 꾸며내지 말고 "특별 혜택" 등 추상적으로 언급.
+
+반드시 아래 JSON 형식 하나로만 응답 (다른 텍스트·코드블록 금지):
+{"formal": "...", "friendly": "...", "promotion": "..."}"""
+
+
+@router.post("/customer-message/{customer_id}")
+def customer_ai_message(customer_id: str, db: Session = Depends(get_db)):
+    """고객 맞춤 아웃리치 메시지 초안 3가지."""
+    ctx = _gather_customer_context(customer_id, db)
+    if ctx is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Customer not found")
+
+    c = ctx["customer"]
+
+    if llm_available():
+        try:
+            raw = llm_chat(
+                _MESSAGE_PROMPT,
+                f"[고객 정보]\n{json.dumps(ctx, ensure_ascii=False, default=str)}",
+                max_tokens=600,
+                temperature=0.7,
+            )
+            # JSON 파싱 시도
+            try:
+                data = json.loads(raw)
+                if isinstance(data, dict) and all(k in data for k in ("formal", "friendly", "promotion")):
+                    return {"messages": data, "model": "openrouter"}
+            except json.JSONDecodeError:
+                # JSON이 아닐 때 첫 { 부터 마지막 } 까지 파싱 재시도
+                try:
+                    start = raw.index("{")
+                    end = raw.rindex("}") + 1
+                    data = json.loads(raw[start:end])
+                    if isinstance(data, dict) and all(k in data for k in ("formal", "friendly", "promotion")):
+                        return {"messages": data, "model": "openrouter"}
+                except Exception:
+                    pass
+        except Exception as e:
+            log.warning("customer message LLM failed: %s", e)
+
+    # LLM 미사용 / 파싱 실패 시 템플릿
+    last = (ctx.get("recent_golf") or [{}])[0].get("course") or (
+        (ctx.get("recent_rooms") or [{}])[0].get("room_type") or ""
+    )
+    detail = f" {last} 이용 시의 만족을 기억합니다." if last else ""
+    return {
+        "messages": {
+            "formal": f"{c['name']} 고객님, 안녕하세요. 설해원입니다.{detail} 다음 방문에도 최상의 서비스로 모시겠습니다.",
+            "friendly": f"안녕하세요 {c['name']}님! 😊 설해원입니다.{detail} 조만간 또 편하게 모시겠습니다.",
+            "promotion": f"{c['name']}님께만 살짝 🎁 설해원 특별 혜택을 안내드립니다.{detail} 답장 주시면 담당자가 직접 연락드립니다.",
+        },
+        "model": "template",
+    }
+
+
+# ─── Feature 3: AI 시맨틱 검색 ───────────────────────────────────────
+
+_SEARCH_PROMPT = """당신은 리조트 CRM의 자연어 → 필터 변환기입니다.
+관리자의 자연어 질의를 받아 DB 검색에 쓸 수 있는 **JSON 필터**로 변환하세요.
+
+사용 가능한 필드:
+- kind: "customer" | "reservation" (기본 customer)
+- grade_in: ["diamond","gold","silver","member"] 중 부분 리스트
+- min_clv: 정수 (원 단위)
+- max_churn: 0.0~1.0
+- min_churn: 0.0~1.0
+- min_visits: 정수
+- tag_contains: 문자열 부분 매칭 (예: "레전드", "이탈", "프로모션")
+- name_like: 이름 부분 매칭
+- phone_like: 전화번호 부분 매칭
+- days_since_visit_gt: 최근 방문으로부터 N일 이상
+
+오직 JSON 하나로만 응답하세요 (다른 텍스트·코드블록 금지). 해당 없는 필드는 생략.
+예:
+질의 "레전드 좋아하는 VIP"
+→ {"kind":"customer","grade_in":["diamond","gold"],"tag_contains":"레전드"}
+
+질의 "45일 이상 안 온 고CLV 고객"
+→ {"kind":"customer","days_since_visit_gt":45,"min_clv":10000000}"""
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+
+
+@router.post("/search/semantic")
+def semantic_search(body: SemanticSearchRequest, db: Session = Depends(get_db)):
+    """자연어 → 구조화 필터 → DB 검색."""
+    q_text = body.query.strip()
+    if not q_text:
+        return {"filters": {}, "results": [], "count": 0}
+
+    filters: dict = {}
+    if llm_available():
+        try:
+            raw = llm_chat(
+                _SEARCH_PROMPT,
+                f"[질의]\n{q_text}",
+                max_tokens=200,
+                temperature=0.1,
+            )
+            # JSON 추출
+            try:
+                filters = json.loads(raw)
+            except json.JSONDecodeError:
+                try:
+                    start = raw.index("{")
+                    end = raw.rindex("}") + 1
+                    filters = json.loads(raw[start:end])
+                except Exception:
+                    filters = {}
+        except Exception as e:
+            log.warning("semantic search LLM failed: %s", e)
+
+    # LLM 실패 / 미사용 → 단순 키워드 매칭으로 fallback
+    if not filters:
+        filters = {"kind": "customer", "name_like": q_text}
+
+    # 필터 적용 (customer만 구현; reservation은 추후 확장)
+    kind = filters.get("kind", "customer")
+    query = db.query(Customer)
+    if isinstance(filters.get("grade_in"), list):
+        query = query.filter(Customer.grade.in_(filters["grade_in"]))
+    if isinstance(filters.get("min_clv"), (int, float)):
+        query = query.filter(Customer.clv >= filters["min_clv"])
+    if isinstance(filters.get("max_churn"), (int, float)):
+        query = query.filter(Customer.churn_risk <= filters["max_churn"])
+    if isinstance(filters.get("min_churn"), (int, float)):
+        query = query.filter(Customer.churn_risk >= filters["min_churn"])
+    if isinstance(filters.get("min_visits"), int):
+        query = query.filter(Customer.total_visits >= filters["min_visits"])
+    if isinstance(filters.get("name_like"), str) and filters["name_like"]:
+        query = query.filter(Customer.name.ilike(f"%{filters['name_like']}%"))
+    if isinstance(filters.get("phone_like"), str) and filters["phone_like"]:
+        query = query.filter(Customer.phone.ilike(f"%{filters['phone_like']}%"))
+    if isinstance(filters.get("days_since_visit_gt"), int):
+        cutoff = datetime.now() - timedelta(days=filters["days_since_visit_gt"])
+        query = query.filter(Customer.last_visit_at <= cutoff)
+
+    # tag_contains는 JSON 배열 내부 부분 매칭 — PostgreSQL 기준
+    tag_needle = filters.get("tag_contains")
+    rows = query.order_by(Customer.clv.desc()).limit(50).all()
+    if isinstance(tag_needle, str) and tag_needle:
+        rows = [
+            r for r in rows
+            if any(tag_needle in t for t in (r.ai_tags or []))
+        ]
+
+    results = [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "phone": c.phone,
+            "grade": c.grade,
+            "clv": int(c.clv or 0),
+            "churn_risk": float(c.churn_risk or 0),
+            "total_visits": c.total_visits,
+            "tags": c.ai_tags or [],
+            "last_visit_at": c.last_visit_at.isoformat() if c.last_visit_at else None,
+        }
+        for c in rows[:30]
+    ]
+
+    return {
+        "filters": filters,
+        "kind": kind,
+        "results": results,
+        "count": len(results),
+    }
+
 

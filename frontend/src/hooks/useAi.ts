@@ -39,3 +39,53 @@ export function respondToAction(
     { suggestion_id: suggestionId, status, note },
   );
 }
+
+// ── Feature 1: Customer AI summary
+export type CustomerAiSummary = {
+  summary: string;
+  context: {
+    grade: string;
+    clv: number;
+    churn_risk: number;
+    total_visits: number;
+    days_since_visit: number | null;
+    tag_count: number;
+  };
+  model: string;
+};
+
+export function useCustomerSummary(id: string) {
+  return useFetch<CustomerAiSummary>(`/ai/customer-summary/${id}`);
+}
+
+// ── Feature 2: Customer message drafts
+export type CustomerMessages = {
+  messages: { formal: string; friendly: string; promotion: string };
+  model: string;
+};
+
+export function generateCustomerMessages(id: string) {
+  return api.post<CustomerMessages>(`/ai/customer-message/${id}`);
+}
+
+// ── Feature 3: Semantic search
+export type SemanticSearchResult = {
+  filters: Record<string, unknown>;
+  kind: string;
+  results: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    grade: string;
+    clv: number;
+    churn_risk: number;
+    total_visits: number;
+    tags: string[];
+    last_visit_at: string | null;
+  }>;
+  count: number;
+};
+
+export function semanticSearch(query: string) {
+  return api.post<SemanticSearchResult>("/ai/search/semantic", { query });
+}

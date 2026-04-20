@@ -18,6 +18,7 @@ import {
 } from "@/hooks/useCustomers";
 import { GradeBadge } from "@/components/customers/GradeBadge";
 import { ChurnGauge } from "@/components/customers/ChurnGauge";
+import { CustomerAiPanel } from "@/components/customers/CustomerAiPanel";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 
@@ -59,6 +60,8 @@ export default function CustomerProfile() {
       >
         <ArrowLeft className="h-4 w-4" /> 고객 목록
       </button>
+
+      <CustomerAiPanel customerId={detail.id} customerName={detail.name} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
         {/* Left: Profile card */}
