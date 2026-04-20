@@ -37,7 +37,7 @@ export function Sidebar() {
         <LogoMark size={32} color="#c5a55a" />
         <div className="min-w-0">
           <div className="font-display text-xl leading-none text-white">
-            Seolhaewon
+            Seolhaeone
           </div>
           <div className="mt-1 font-display text-[10px] tracking-[0.3em] text-gold">
             雪 海 園

@@ -143,7 +143,7 @@ export default function Reserve() {
           <a href={import.meta.env.BASE_URL} className="flex items-center gap-3">
             <LogoMark size={32} color="#0f0f0f" />
             <div>
-              <div className="font-display text-lg leading-none text-text-dark">Seolhaewon</div>
+              <div className="font-display text-lg leading-none text-text-dark">Seolhaeone</div>
               <div className="text-[10px] tracking-[0.3em] text-gold-dark">雪 海 園</div>
             </div>
           </a>

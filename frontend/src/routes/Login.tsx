@@ -55,7 +55,7 @@ export default function Login() {
         {/* Logo */}
         <div className="flex flex-col items-center">
           <LogoMark size={64} color="#c5a55a" />
-          <h1 className="mt-5 font-display text-3xl text-white">Seolhaewon</h1>
+          <h1 className="mt-5 font-display text-3xl text-white">Seolhaeone</h1>
           <p className="mt-1 font-display text-sm tracking-[0.3em] text-gold">
             雪 海 園
           </p>

@@ -40,7 +40,7 @@ def chat(
         "Content-Type": "application/json",
         # OpenRouter 권장: referrer / app name (선택이지만 분석용으로 유용)
         "HTTP-Referer": "https://seolhaeone.vercel.app",
-        "X-Title": "Seolhaewon AI CRM",
+        "X-Title": "Seolhaeone AI CRM",
     }
     payload = {
         "model": model or _DEFAULT_MODEL,
