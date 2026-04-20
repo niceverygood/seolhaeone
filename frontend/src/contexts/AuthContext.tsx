@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, AUTH_EXPIRED_EVENT } from "@/lib/api";
 import type { StaffProfile, Token } from "@/lib/types";
 
 type AuthState = {
@@ -29,6 +29,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  // 어떤 API 요청이든 401을 받으면 api.ts가 AUTH_EXPIRED_EVENT를 던진다.
+  // 즉시 user/token을 비워 모든 폴링 훅이 멈추고 /login으로 리다이렉트 됨.
+  useEffect(() => {
+    const onExpired = () => logout();
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, [logout]);
 
   useEffect(() => {
     if (!token) {

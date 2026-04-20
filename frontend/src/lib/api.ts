@@ -29,6 +29,9 @@ export class ApiError extends Error {
   }
 }
 
+/** 토큰 만료/무효 시 AuthContext가 구독하여 자동 로그아웃. */
+export const AUTH_EXPIRED_EVENT = "auth:expired";
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem("token");
   const headers: Record<string, string> = {
@@ -39,7 +42,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    localStorage.removeItem("token");
+    // /auth/login 자체의 401은 자격증명 오류이므로 세션 expire 이벤트 발생시키지 않음.
+    const isLoginAttempt = path.startsWith("/auth/login");
+    if (!isLoginAttempt) {
+      localStorage.removeItem("token");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      }
+    }
     throw new ApiError(401, "Unauthorized");
   }
 
