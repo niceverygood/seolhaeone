@@ -2,23 +2,63 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 /**
- * In-memory SWR 캐시 + in-flight dedup.
+ * In-memory SWR 캐시 + in-flight dedup + sessionStorage 영속화.
  * - 30초 이내 재방문은 캐시 즉시 반환 (loading=false)
  * - 30초~5분은 stale 데이터 표시 + 백그라운드 revalidate
+ * - 탭 새로고침 시 sessionStorage에서 hydrate → 첫 렌더부터 데이터 표시
  * - 같은 path+params로 동시에 여러 훅이 호출되면 단일 요청으로 합쳐 결과 공유
- * - 파라미터 순서/undefined 값에 상관없이 동일 키로 정규화 (prefetch 호환성)
  */
-const cache = new Map<string, { data: unknown; ts: number }>();
-const inflight = new Map<string, Promise<unknown>>();
 const FRESH_TTL = 30_000;
 const HARD_TTL = 5 * 60_000;
+const STORAGE_KEY = "shw:fetch:v1";
+
+type Entry = { data: unknown; ts: number };
+
+const cache = new Map<string, Entry>();
+const inflight = new Map<string, Promise<unknown>>();
+
+// ─── sessionStorage hydrate (1회) ────────────────────────────────
+// 페이지 reload 후에도 SWR로 stale 데이터를 즉시 표시하고 백그라운드 갱신.
+if (typeof window !== "undefined") {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, Entry>;
+      const cutoff = Date.now() - HARD_TTL;
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v.ts === "number" && v.ts > cutoff) cache.set(k, v);
+      }
+    }
+  } catch {
+    /* corrupted → 무시 */
+  }
+}
+
+// 캐시 변경 시 sessionStorage 동기화 — 디바운스로 쓰기 빈도 제한
+let persistTimer: number | null = null;
+function schedulePersist() {
+  if (typeof window === "undefined") return;
+  if (persistTimer !== null) return;
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    try {
+      const snapshot: Record<string, Entry> = {};
+      const cutoff = Date.now() - HARD_TTL;
+      for (const [k, v] of cache) {
+        if (v.ts > cutoff) snapshot[k] = v;
+      }
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+      /* quota/JSON 실패 무시 */
+    }
+  }, 500);
+}
 
 function normalizeKey(
   path: string,
   params?: Record<string, string | number | boolean | undefined | null>,
 ): string {
   if (!params) return path + "{}";
-  // null/undefined 제거 후 키 정렬 → 순서가 달라도 동일 키
   const sorted: Record<string, string | number | boolean> = {};
   for (const k of Object.keys(params).sort()) {
     const v = params[k];
@@ -39,6 +79,7 @@ function sharedGet<T>(
     .get<T>(path, params)
     .then((data) => {
       cache.set(key, { data, ts: Date.now() });
+      schedulePersist();
       return data;
     })
     .finally(() => {
@@ -100,6 +141,7 @@ export function invalidateCache(pathPrefix: string) {
   for (const k of cache.keys()) {
     if (k.startsWith(pathPrefix)) cache.delete(k);
   }
+  schedulePersist();
 }
 
 /** 백그라운드에서 미리 호출해 useFetch 캐시에 적재. 에러는 무시. */

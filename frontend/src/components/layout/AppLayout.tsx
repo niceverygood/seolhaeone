@@ -21,30 +21,32 @@ const titleMap: Record<string, { title: string; subtitle?: string }> = {
 // 사이드바에서 자주 이동하는 경로를 백그라운드 프리페치.
 // useFetch 캐시에 적재되어 실제 페이지 진입 시 즉시 렌더.
 const PREFETCH: Array<[string, Record<string, string | number> | undefined]> = [
+  ["/dashboard/kpi", { period: "monthly" }],
+  ["/dashboard/customer-stats", undefined],
+  ["/ai/suggestions", undefined],
+  ["/customers", { limit: 50, sort: "-clv" }],
   ["/golf/courses", undefined],
   ["/resort/rooms", { building: "마운틴스테이" }],
-  ["/customers", { limit: 50, sort: "-clv" }],
-  ["/ai/suggestions", undefined],
 ];
+
+// requestIdleCallback 폴백 — 브라우저가 바쁠 때 양보
+const scheduleIdle = (fn: () => void) => {
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number };
+  if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 1500 });
+  else window.setTimeout(fn, 200);
+};
 
 export function AppLayout() {
   const { pathname } = useLocation();
   const { user, loading } = useAuth();
 
   // 로그인 직후 주변 페이지 데이터 프리페치 (1회).
-  // 낮은 우선순위로 순차 호출 — 현재 페이지 네트워크를 막지 않음.
+  // 유휴 시간에 병렬로 — 현재 페이지 렌더를 막지 않음.
   useEffect(() => {
     if (!user) return;
-    let idx = 0;
-    const next = () => {
-      if (idx >= PREFETCH.length) return;
-      const [p, q] = PREFETCH[idx++];
-      void prefetch(p, q).finally(() => {
-        // 각 프리페치 사이 약간의 지연 — 초기 페이지 렌더에 양보
-        window.setTimeout(next, 150);
-      });
-    };
-    window.setTimeout(next, 500);
+    scheduleIdle(() => {
+      for (const [p, q] of PREFETCH) void prefetch(p, q);
+    });
   }, [user]);
 
   if (loading) return <Spinner />;

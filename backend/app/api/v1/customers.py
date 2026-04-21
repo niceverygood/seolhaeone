@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -31,6 +31,7 @@ class CustomerUpdate(BaseModel):
 
 @router.get("")
 def list_customers(
+    response: Response,
     grade: str | None = Query(None),
     sort: str = Query("-clv"),
     search: str | None = Query(None),
@@ -38,7 +39,16 @@ def list_customers(
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Customer)
+    # 짧은 브라우저/CDN 캐시 — 목록은 30초 정도면 충분히 최신
+    response.headers["Cache-Control"] = "private, max-age=30, stale-while-revalidate=120"
+
+    # 필요한 컬럼만 SELECT — 큰 JSONB(preferences, ai_memo) 등은 목록에서 불필요
+    cols = (
+        Customer.id, Customer.name, Customer.phone, Customer.email,
+        Customer.grade, Customer.clv, Customer.churn_risk,
+        Customer.total_visits, Customer.last_visit_at, Customer.ai_tags,
+    )
+    q = db.query(*cols)
 
     if grade:
         q = q.filter(Customer.grade == grade)
@@ -53,25 +63,34 @@ def list_customers(
         col = getattr(Customer, sort, Customer.clv)
         q = q.order_by(col.asc())
 
-    total = q.count()
-    customers = q.offset(offset).limit(limit).all()
+    # count는 필터만 공유하는 별도 쿼리 — order_by 제거로 속도 개선
+    count_q = db.query(func.count(Customer.id))
+    if grade:
+        count_q = count_q.filter(Customer.grade == grade)
+    if search:
+        count_q = count_q.filter(
+            Customer.name.ilike(f"%{search}%") | Customer.phone.ilike(f"%{search}%")
+        )
+    total = count_q.scalar() or 0
+
+    rows = q.offset(offset).limit(limit).all()
 
     return {
-        "total": total,
+        "total": int(total),
         "items": [
             {
-                "id": str(c.id),
-                "name": c.name,
-                "phone": c.phone,
-                "email": c.email,
-                "grade": c.grade,
-                "clv": int(c.clv or 0),
-                "churn_risk": float(c.churn_risk or 0),
-                "total_visits": c.total_visits,
-                "last_visit_at": c.last_visit_at.isoformat() if c.last_visit_at else None,
-                "ai_tags": c.ai_tags or [],
+                "id": str(r[0]),
+                "name": r[1],
+                "phone": r[2],
+                "email": r[3],
+                "grade": r[4],
+                "clv": int(r[5] or 0),
+                "churn_risk": float(r[6] or 0),
+                "total_visits": r[7],
+                "last_visit_at": r[8].isoformat() if r[8] else None,
+                "ai_tags": r[9] or [],
             }
-            for c in customers
+            for r in rows
         ],
     }
 

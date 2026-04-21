@@ -6,11 +6,16 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME, docs_url="/docs", openapi_url="/openapi.json")
+
+# JSON 응답을 gzip으로 압축 — 대시보드·고객 목록 등 큰 페이로드에서 70~90% 절감.
+# min_size=500: 짧은 응답(로그인 토큰 등)은 압축 비용을 피함.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 app.add_middleware(
     CORSMiddleware,
@@ -172,9 +177,61 @@ def diag():
     return result
 
 
+# 핫 필터 컬럼용 인덱스 — create_all은 기존 테이블의 빠진 인덱스를 추가하지 않으므로
+# CREATE INDEX IF NOT EXISTS로 별도 멱등 보장.
+_PERF_INDEXES: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS ix_customers_grade ON customers (grade)",
+    "CREATE INDEX IF NOT EXISTS ix_customers_churn_risk ON customers (churn_risk)",
+    "CREATE INDEX IF NOT EXISTS ix_customers_clv ON customers (clv)",
+    "CREATE INDEX IF NOT EXISTS ix_customers_last_visit_at ON customers (last_visit_at)",
+    "CREATE INDEX IF NOT EXISTS ix_customers_name ON customers (name)",
+    "CREATE INDEX IF NOT EXISTS ix_daily_stats_stat_date ON daily_stats (stat_date)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_tee_date ON golf_teetimes (tee_date)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_status ON golf_teetimes (status)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_course_id ON golf_teetimes (course_id)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_customer_id ON golf_teetimes (customer_id)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_noshow_score ON golf_teetimes (noshow_score)",
+    "CREATE INDEX IF NOT EXISTS ix_room_reservations_check_in ON room_reservations (check_in)",
+    "CREATE INDEX IF NOT EXISTS ix_room_reservations_status ON room_reservations (status)",
+    "CREATE INDEX IF NOT EXISTS ix_room_reservations_customer_id ON room_reservations (customer_id)",
+    "CREATE INDEX IF NOT EXISTS ix_room_reservations_room_id ON room_reservations (room_id)",
+    "CREATE INDEX IF NOT EXISTS ix_rooms_building ON rooms (building)",
+    "CREATE INDEX IF NOT EXISTS ix_rooms_room_type ON rooms (room_type)",
+    "CREATE INDEX IF NOT EXISTS ix_ai_actions_log_created_at ON ai_actions_log (created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_ai_actions_log_target_customer_id ON ai_actions_log (target_customer_id)",
+    "CREATE INDEX IF NOT EXISTS ix_golf_teetimes_date_status ON golf_teetimes (tee_date, status)",
+)
+
+
+def _ensure_perf_indexes() -> list[str]:
+    """핫 경로 인덱스를 멱등하게 생성. 실패 항목은 문자열로 반환."""
+    failed: list[str] = []
+    if engine is None:
+        return ["engine is None"]
+    try:
+        with engine.begin() as conn:
+            for stmt in _PERF_INDEXES:
+                try:
+                    conn.execute(text(stmt))
+                except Exception as e:  # noqa: BLE001
+                    failed.append(f"{stmt[:60]}… → {type(e).__name__}")
+    except Exception as e:  # noqa: BLE001
+        failed.append(f"connect: {type(e).__name__}: {e}")
+    return failed
+
+
+@app.post("/ensure-indexes")
+def ensure_indexes():
+    """핫 필터 컬럼에 인덱스 추가 — 기존 DB에도 멱등하게 적용."""
+    if _IMPORT_ERROR:
+        return {"ok": False, "stage": "import", "error": _IMPORT_ERROR}
+    failed = _ensure_perf_indexes()
+    return {"ok": not failed, "applied": len(_PERF_INDEXES) - len(failed), "failed": failed}
+
+
 @app.post("/bootstrap")
 def bootstrap():
-    """최초 1회: 테이블 생성 + 기본 admin 계정. 멱등."""
+    """최초 1회: 테이블 생성 + 기본 admin 계정 + 성능 인덱스. 멱등."""
     if _IMPORT_ERROR:
         return {"bootstrapped": False, "stage": "import", "error": _IMPORT_ERROR}
     if ENGINE_INIT_ERROR or engine is None:
@@ -188,6 +245,8 @@ def bootstrap():
             "error": f"{type(e).__name__}: {str(e)[:500]}",
             "trace": traceback.format_exc()[-1000:],
         }
+    # 기존 테이블의 빠진 인덱스 추가 (실패해도 bootstrap은 진행)
+    _ensure_perf_indexes()
     try:
         session = next(get_db())
         try:

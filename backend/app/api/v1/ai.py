@@ -23,59 +23,82 @@ class AiQueryRequest(BaseModel):
     query: str
 
 
+_CTX_CACHE: dict = {"data": None, "ts": 0.0, "day": None}
+_CTX_TTL = 120.0  # 2분 — LLM 답변 정확도에 영향 없음, DB 부하 크게 감소
+
+
 def _collect_business_context(db: Session) -> dict:
-    """LLM이 참조할 현재 비즈니스 스냅샷 — 숫자가 너무 많아지지 않도록 요약."""
+    """LLM이 참조할 현재 비즈니스 스냅샷 — 숫자가 너무 많아지지 않도록 요약.
+    모든 관리자에게 동일한 집계값이라 프로세스 내에서 짧게 캐시한다."""
+    import time as _t
     today = date.today()
+    now = _t.time()
+    if (
+        _CTX_CACHE["data"] is not None
+        and _CTX_CACHE["day"] == today
+        and now - _CTX_CACHE["ts"] < _CTX_TTL
+    ):
+        return _CTX_CACHE["data"]
+
     month_start = today.replace(day=1)
     tomorrow = today + timedelta(days=1)
 
-    # 이번 달 매출
-    stats = db.query(DailyStat).filter(
+    # 이번 달 매출 — SUM 집계 한 번으로 네트워크/파이썬 합산 모두 제거
+    rev_row = db.query(
+        func.coalesce(func.sum(DailyStat.total_revenue), 0),
+        func.coalesce(func.sum(DailyStat.golf_revenue), 0),
+        func.coalesce(func.sum(DailyStat.room_revenue), 0),
+        func.coalesce(func.sum(DailyStat.fnb_revenue), 0),
+        func.coalesce(func.sum(DailyStat.oncheon_revenue), 0),
+    ).filter(
         DailyStat.stat_date >= month_start, DailyStat.stat_date <= today
-    ).all()
-    total_rev = sum(int(s.total_revenue or 0) for s in stats)
-    golf_rev = sum(int(s.golf_revenue or 0) for s in stats)
-    room_rev = sum(int(s.room_revenue or 0) for s in stats)
-    fnb_rev = sum(int(s.fnb_revenue or 0) for s in stats)
-    oncheon_rev = sum(int(s.oncheon_revenue or 0) for s in stats)
+    ).one()
+    total_rev, golf_rev, room_rev, fnb_rev, oncheon_rev = (int(v or 0) for v in rev_row)
 
-    # 코스별 이번 달 라운드
-    course_rounds = []
-    for c in db.query(GolfCourse).all():
-        cnt = db.query(GolfTeetime).filter(
-            GolfTeetime.course_id == c.id,
-            GolfTeetime.tee_date >= month_start,
-            GolfTeetime.tee_date <= today,
-            GolfTeetime.status.in_(["completed", "reserved"]),
-        ).count()
-        course_rounds.append({"course": c.name, "rounds": cnt})
+    # 코스별 이번 달 라운드 — 이전 N+1 루프를 단일 JOIN+GROUP BY로 치환
+    course_rows = (
+        db.query(GolfCourse.name, func.count(GolfTeetime.id))
+        .outerjoin(
+            GolfTeetime,
+            (GolfTeetime.course_id == GolfCourse.id)
+            & (GolfTeetime.tee_date >= month_start)
+            & (GolfTeetime.tee_date <= today)
+            & (GolfTeetime.status.in_(["completed", "reserved"])),
+        )
+        .group_by(GolfCourse.name)
+        .all()
+    )
+    course_rounds = [{"course": n, "rounds": int(c or 0)} for n, c in course_rows]
 
     # 고객 분포
     grade_rows = db.query(Customer.grade, func.count()).group_by(Customer.grade).all()
     grade_dist = {g: c for g, c in grade_rows}
     total_customers = sum(grade_dist.values())
-    churn_high = db.query(Customer).filter(Customer.churn_risk >= 0.5).count()
+    churn_high = db.query(func.count(Customer.id)).filter(Customer.churn_risk >= 0.5).scalar() or 0
 
-    # 예약 현황
-    tomorrow_golf = db.query(GolfTeetime).filter(
+    # 예약·점유·노쇼·총객실·활성패키지 — 스칼라 서브쿼리 1회 왕복으로 통합
+    tomorrow_golf = db.query(func.count(GolfTeetime.id)).filter(
         GolfTeetime.tee_date == tomorrow, GolfTeetime.status == "reserved",
-    ).count()
-    tomorrow_room = db.query(RoomReservation).filter(
+    ).scalar() or 0
+    tomorrow_room = db.query(func.count(RoomReservation.id)).filter(
         RoomReservation.check_in == tomorrow, RoomReservation.status == "confirmed",
-    ).count()
+    ).scalar() or 0
 
-    # 오늘 점유율
-    today_stat = db.query(DailyStat).filter(DailyStat.stat_date == today).first()
-    occupancy = float(today_stat.room_occupancy_rate or 0) * 100 if today_stat else 0
+    today_occ = db.query(DailyStat.room_occupancy_rate).filter(
+        DailyStat.stat_date == today
+    ).scalar()
+    occupancy = float(today_occ or 0) * 100
 
-    # 노쇼 위험 건수
-    noshow_risk = db.query(GolfTeetime).filter(
+    noshow_risk = db.query(func.count(GolfTeetime.id)).filter(
         GolfTeetime.tee_date >= today,
         GolfTeetime.noshow_score >= 0.3,
         GolfTeetime.status == "reserved",
-    ).count()
+    ).scalar() or 0
 
-    return {
+    total_rooms = db.query(func.count(Room.id)).scalar() or 0
+    active_packages = db.query(func.count(Package.id)).filter(Package.is_active.is_(True)).scalar() or 0
+
+    result = {
         "today": str(today),
         "month_to_date_revenue": {
             "total": total_rev, "golf": golf_rev, "room": room_rev,
@@ -85,17 +108,21 @@ def _collect_business_context(db: Session) -> dict:
         "customers": {
             "total": total_customers,
             "by_grade": grade_dist,
-            "churn_high_risk": churn_high,
+            "churn_high_risk": int(churn_high),
         },
         "tomorrow_reservations": {
-            "golf": tomorrow_golf,
-            "room": tomorrow_room,
+            "golf": int(tomorrow_golf),
+            "room": int(tomorrow_room),
         },
         "today_room_occupancy_pct": round(occupancy, 1),
-        "noshow_risk_count": noshow_risk,
-        "total_rooms": db.query(Room).count(),
-        "active_packages": db.query(Package).filter(Package.is_active.is_(True)).count(),
+        "noshow_risk_count": int(noshow_risk),
+        "total_rooms": int(total_rooms),
+        "active_packages": int(active_packages),
     }
+    _CTX_CACHE["data"] = result
+    _CTX_CACHE["ts"] = now
+    _CTX_CACHE["day"] = today
+    return result
 
 
 _LLM_SYSTEM_PROMPT = """당신은 설해원 리조트(골프+호텔+온천 복합 단지)의 AI CRM 어시스턴트입니다.

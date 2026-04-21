@@ -12,7 +12,7 @@ class DailyStat(Base):
     __tablename__ = "daily_stats"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    stat_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    stat_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
     golf_revenue: Mapped[int] = mapped_column(Numeric(12, 0), default=0)
     room_revenue: Mapped[int] = mapped_column(Numeric(12, 0), default=0)
     fnb_revenue: Mapped[int] = mapped_column(Numeric(12, 0), default=0)
@@ -32,10 +32,10 @@ class AiActionLog(Base):
     __tablename__ = "ai_actions_log"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    target_customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"))
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    target_customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="pending")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     result: Mapped[dict | None] = mapped_column(JSONB)
     created_by: Mapped[str | None] = mapped_column(String(50))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

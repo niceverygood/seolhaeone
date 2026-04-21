@@ -12,8 +12,8 @@ class Room(Base):
     __tablename__ = "rooms"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    building: Mapped[str] = mapped_column(String(50), nullable=False)
-    room_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    building: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    room_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     room_number: Mapped[str] = mapped_column(String(20), nullable=False)
     floor: Mapped[int | None] = mapped_column(Integer)
     capacity: Mapped[int] = mapped_column(Integer, default=2)
@@ -26,11 +26,11 @@ class RoomReservation(Base):
     __tablename__ = "room_reservations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("rooms.id"))
-    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"))
-    check_in: Mapped[date] = mapped_column(Date, nullable=False)
+    room_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("rooms.id"), index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True)
+    check_in: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     check_out: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="confirmed")
+    status: Mapped[str] = mapped_column(String(20), default="confirmed", index=True)
     total_price: Mapped[int | None] = mapped_column(Numeric(10, 0))
     dynamic_price_applied: Mapped[bool] = mapped_column(Boolean, default=False)
     package_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("packages.id"))

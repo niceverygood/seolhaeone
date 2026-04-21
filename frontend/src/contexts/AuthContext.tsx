@@ -19,13 +19,31 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const USER_CACHE_KEY = "shw:user";
+
+function readCachedUser(): StaffProfile | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as StaffProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<StaffProfile | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
-  const [loading, setLoading] = useState(!!localStorage.getItem("token"));
+  // 토큰이 있으면 직전 프로필을 즉시 hydrate — 앱 셸을 바로 렌더하여
+  // /auth/me 왕복(콜드 스타트 시 1~5초)을 기다리지 않게 함.
+  const initialToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const initialUser = initialToken ? readCachedUser() : null;
+
+  const [user, setUser] = useState<StaffProfile | null>(initialUser);
+  const [token, setToken] = useState<string | null>(initialToken);
+  // 캐시된 user가 있으면 loading=false로 시작 → 앱 셸 즉시 표시, 검증은 백그라운드.
+  const [loading, setLoading] = useState<boolean>(!!initialToken && !initialUser);
 
   const logout = useCallback(() => {
     localStorage.removeItem("token");
+    localStorage.removeItem(USER_CACHE_KEY);
     setToken(null);
     setUser(null);
   }, []);
@@ -45,7 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<StaffProfile>("/auth/me")
-      .then(setUser)
+      .then((profile) => {
+        setUser(profile);
+        try {
+          localStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+        } catch {
+          /* quota 초과 무시 */
+        }
+      })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) logout();
       })
@@ -81,6 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(access_token);
     const profile = await api.get<StaffProfile>("/auth/me");
     setUser(profile);
+    try {
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+    } catch {
+      /* quota 초과 무시 */
+    }
   }, []);
 
   return (
