@@ -42,33 +42,22 @@ export function TeetimeSlotCard({ slot, onReserveClick, onCustomerClick }: Props
   const nameClasses = cn(
     "text-sm font-medium",
     isVip ? "text-text-dark" : "text-text-primary",
-    hasCustomer && "cursor-pointer rounded px-1 -mx-1 hover:bg-gold/15 hover:underline underline-offset-2",
   );
 
-  return (
-    <div
-      className={cn(
-        "relative flex h-full min-h-[68px] flex-col justify-between rounded-lg border p-2.5 transition-shadow hover:shadow-md",
-        isVip
-          ? "border-gold/50 bg-gold-bg/30"
-          : "border-border-light bg-bg-card",
-        isHighRisk && "ring-1 ring-danger/30",
-      )}
-    >
+  const cardClasses = cn(
+    "relative flex h-full min-h-[68px] w-full flex-col justify-between rounded-lg border p-2.5 text-left transition-shadow hover:shadow-md",
+    isVip
+      ? "border-gold/50 bg-gold-bg/30"
+      : "border-border-light bg-bg-card",
+    isHighRisk && "ring-1 ring-danger/30",
+    hasCustomer && "cursor-pointer hover:border-gold hover:bg-gold/5",
+  );
+
+  const body = (
+    <>
       <div className="flex items-center gap-1.5">
         {isVip && <Diamond className="h-3 w-3 text-gold" />}
-        {hasCustomer ? (
-          <button
-            type="button"
-            onClick={() => onCustomerClick?.(slot.customer_id!)}
-            className={nameClasses}
-            title="고객 상세 보기"
-          >
-            {slot.customer_name ?? "미지정"}
-          </button>
-        ) : (
-          <span className={nameClasses}>{slot.customer_name ?? "미지정"}</span>
-        )}
+        <span className={nameClasses}>{slot.customer_name ?? "미지정"}</span>
         {isPendingConfirm && (
           <span className="rounded bg-[color:var(--color-danger)]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[color:var(--color-danger)]">
             확정대기
@@ -104,6 +93,21 @@ export function TeetimeSlotCard({ slot, onReserveClick, onCustomerClick }: Props
           {slot.package_name}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (hasCustomer) {
+    return (
+      <button
+        type="button"
+        onClick={() => onCustomerClick?.(slot.customer_id!)}
+        className={cardClasses}
+        title="고객 상세 보기"
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return <div className={cardClasses}>{body}</div>;
 }
