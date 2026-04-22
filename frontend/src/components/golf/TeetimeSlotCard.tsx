@@ -5,6 +5,7 @@ import type { TeetimeResponse } from "@/lib/types";
 type Props = {
   slot: TeetimeResponse;
   onReserveClick?: (slot: TeetimeResponse) => void;
+  onCustomerClick?: (customerId: string) => void;
 };
 
 const gradeBadge: Record<string, string> = {
@@ -14,7 +15,7 @@ const gradeBadge: Record<string, string> = {
   member: "bg-border-light text-text-muted",
 };
 
-export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
+export function TeetimeSlotCard({ slot, onReserveClick, onCustomerClick }: Props) {
   const isBooked =
     slot.status === "reserved" ||
     slot.status === "completed" ||
@@ -37,6 +38,13 @@ export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
     );
   }
 
+  const hasCustomer = !!slot.customer_id;
+  const nameClasses = cn(
+    "text-sm font-medium",
+    isVip ? "text-text-dark" : "text-text-primary",
+    hasCustomer && "cursor-pointer rounded px-1 -mx-1 hover:bg-gold/15 hover:underline underline-offset-2",
+  );
+
   return (
     <div
       className={cn(
@@ -49,9 +57,18 @@ export function TeetimeSlotCard({ slot, onReserveClick }: Props) {
     >
       <div className="flex items-center gap-1.5">
         {isVip && <Diamond className="h-3 w-3 text-gold" />}
-        <span className={cn("text-sm font-medium", isVip ? "text-text-dark" : "text-text-primary")}>
-          {slot.customer_name ?? "미지정"}
-        </span>
+        {hasCustomer ? (
+          <button
+            type="button"
+            onClick={() => onCustomerClick?.(slot.customer_id!)}
+            className={nameClasses}
+            title="고객 상세 보기"
+          >
+            {slot.customer_name ?? "미지정"}
+          </button>
+        ) : (
+          <span className={nameClasses}>{slot.customer_name ?? "미지정"}</span>
+        )}
         {isPendingConfirm && (
           <span className="rounded bg-[color:var(--color-danger)]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[color:var(--color-danger)]">
             확정대기
